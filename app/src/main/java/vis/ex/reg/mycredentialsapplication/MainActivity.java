@@ -152,21 +152,15 @@ public class MainActivity extends AppCompatActivity implements MyAdapter.ItemCli
     }
 
     private void getCredentialsFromAPI() {
-        Log.d("CredentialsApp", " getCredentialsFromAPI() 1");
         RequestQueue queue = Volley.newRequestQueue(this);
         String url = getResources().getString(R.string.api_url) + "/credentials/";
-        Log.d("CredentialsApp", url);
 
         // Request a string response from the provided URL.
         StringRequest stringRequest = new StringRequest(Request.Method.GET, url,
             new Response.Listener<String>() {
                 @Override
                 public void onResponse(String response) {
-                    // Display the first 500 characters of the response string.
-                    Log.d("CredentialsApp", "onResponse()");
-                    Log.d("CredentialsApp", response);
                     try {
-                        Log.d("CredentialsApp", "response received");
                         JSONArray credentialArray = new JSONArray(response);
                         methodToHoldUntilResponseArrived(credentialArray);
                     } catch (java.lang.Throwable e) {
@@ -180,22 +174,15 @@ public class MainActivity extends AppCompatActivity implements MyAdapter.ItemCli
                         for (int i = 0; i < response.length(); i++) {
                             JSONObject obj = (JSONObject) response.get(i);
 
-                            int credentialId = Integer.valueOf(obj.getString("id"));
-                            String serviceName = obj.getString("serviceName");
-                            String serviceUrl = obj.getString("serviceUrl");
-                            String username = obj.getString("username");
-                            String email = obj.getString("email");
-                            String encodedPassword = obj.getString("encodedPassword");
-                            String dateLastModified = obj.getString("dateLastModified");
-                            String note = obj.getString("note");
-                            Boolean active = Boolean.valueOf(obj.getString("active"));
-                            Log.d("CredentialsApp", dateLastModified);
-//                            Log.d("CredentialsApp", "credentialId: " + credentialId + ", serviceUrl: " + serviceUrl +
-//                            ", serviceName: " + serviceName + ", username: " + username + ", email: " + email +
-//                            ", encodedPassword : " + encodedPassword  + ", dateLastModified: " + dateLastModified +
-//                            ", note: " + note + ", active: " + active);
-                            credentialList.add(new Credential(credentialId, serviceName, encodedPassword,
-                                dateLastModified, active));
+                            credentialList.add(new Credential(Integer.valueOf(obj.getString("id")),
+                                                                obj.getString("serviceName"),
+                                                                obj.getString("serviceUrl"),
+                                                                obj.getString("username"),
+                                                                obj.getString("email"),
+                                                                obj.getString("encodedPassword"),
+                                                                obj.getString("dateLastModified"),
+                                                                obj.getString("note"),
+                                                                Boolean.valueOf(obj.getString("active"))));
                         }
                     } catch(JSONException e) {
                         Log.e("CredentialsApp", "unexpected JSON exception", e);
@@ -222,9 +209,11 @@ public class MainActivity extends AppCompatActivity implements MyAdapter.ItemCli
     @Override
     public void onItemClick(View view, int position) {
         if (dataAvailable) {
-            Log.d("CredentialsApp", "onItemClick()");
+//            Log.d("CredentialsApp", "onItemClick()");
             Intent intent = new Intent(MainActivity.this, CredentialActivity.class);
-            intent.putExtra("credentialId", String.valueOf(credentialList.get(position).Credential_ID));
+//            Log.d("CredentialsApp", credentialList.get(position).toJSON().toString());
+//            Log.d("CredentialsApp", "onItemClick()");
+            intent.putExtra("credential", credentialList.get(position).toJSON().toString());
 //            unregisterReceiver(this.connectivityChecker);
 //            unregisterReceiver(broadcastReceiver);
             startActivity(intent);
@@ -269,9 +258,7 @@ public class MainActivity extends AppCompatActivity implements MyAdapter.ItemCli
                 credentialList = result;
                 dataAvailable = true;
             } else {
-                result.add(new Credential(-1,
-                    "internet needed to get credentials from the API",
-                    "API", "", false));
+                Log.e("CredentialsApp", "No information available.");
                 dataAvailable = false;
             }
             populateRecyclerView(result);
