@@ -33,9 +33,7 @@ import org.json.JSONException;
 import org.json.JSONObject;
 
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 
 import static java.lang.Integer.parseInt;
 
@@ -45,7 +43,7 @@ public class MainActivity extends AppCompatActivity implements MyAdapter.ItemCli
     private List<Credential> credentialList  = new ArrayList<>();
     private AppDatabase database;
     private RecyclerView recyclerView;
-//    private CheckConnectivity connectivityChecker;
+    private CheckConnectivity connectivityChecker;
     private boolean dataAvailable;
     private boolean snackBarDisplayed;
     private Snackbar snackBar;
@@ -54,79 +52,73 @@ public class MainActivity extends AppCompatActivity implements MyAdapter.ItemCli
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        Log.d("onCreate: ", "1");
         setContentView(R.layout.activity_main);
         Toolbar toolbar = findViewById(R.id.toolbar);
         setSupportActionBar(toolbar);
 
         coordinatorLayout = findViewById(R.id.credentials_page);
 
-        FloatingActionButton fab = findViewById(R.id.fab);
-        fab.setOnClickListener(new View.OnClickListener() {
+        FloatingActionButton searchButton = findViewById(R.id.search);
+        searchButton.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
-                Snackbar.make(view, "Replace with your own action", Snackbar.LENGTH_LONG)
-                        .setAction("Action", null).show();
+//                Snackbar.make(view, "Replace with your own action", Snackbar.LENGTH_LONG)
+//                    .setAction("Action", null).show();
+
+                Intent intent = new Intent(MainActivity.this, AddCredentialActivity.class);
+//                unregisterReceiver(this.connectivityChecker);
+                unregisterReceiver(broadcastReceiver);
+                startActivity(intent);
             }
         });
-        Log.d("onCreate: ", "2");
+
         recyclerView = findViewById(R.id.credentials_recycler_view);
         recyclerView.setLayoutManager(new LinearLayoutManager(this));
-        Log.d("onCreate: ", "3");
         ConnectivityManager connectivityManager = (ConnectivityManager) getSystemService(Context.CONNECTIVITY_SERVICE);
+
         boolean internetConnection = (connectivityManager
             .getNetworkInfo(ConnectivityManager.TYPE_MOBILE)
             .getState() == NetworkInfo.State.CONNECTED || connectivityManager
             .getNetworkInfo(ConnectivityManager.TYPE_WIFI)
             .getState() == NetworkInfo.State.CONNECTED);
-        Log.d("onCreate: ", "4");
+
 //        this.registerReceiver(this.connectivityChecker, new IntentFilter(ConnectivityManager.CONNECTIVITY_ACTION));
-//        this.registerReceiver(broadcastReceiver, new IntentFilter("connection_change"));
-//
-//        // Get the transferred data from source activity.
-//        Intent intent = getIntent();
-//        bookId = intent.getStringExtra("bookId");
-//
-//        bookTitle = findViewById(R.id.bookTitle);
-//        bookDescription = findViewById(R.id.bookDescription);
-//        bookInfoType = findViewById(R.id.bookInfoType);
-        Log.d("onCreate: ", "5");
+        this.registerReceiver(broadcastReceiver, new IntentFilter("connection_change"));
+
         // get instance of database
         database = AppDatabase.getDatabase(getApplicationContext());
 
-        // if connected get data from API and save to DB.
-        // if not connected get data from DB.
+        // if connected get data from API, compare dateLastModified with date from local DB and
+        // update relevant data. If not connected get data from DB.
         UpdateViewAsync updateViewAsync = new UpdateViewAsync();
         updateViewAsync.execute();
 
         if (internetConnection) {
             getCredentialsFromAPI();
         } else {
-            Log.e("onCreate: ", "no connection");
-//            UpdateViewAsync updateViewAsync = new UpdateViewAsync();
-//            updateViewAsync.execute();
+            Log.e("CredentialsApp", "OnCreate: no connection");
+            // Load date from local DB and display
         }
-        Log.d("onCreate: ", "6");
     }
 
 
-//    BroadcastReceiver broadcastReceiver = new BroadcastReceiver() {
-//        @Override
-//        public void onReceive(Context context, Intent intent) {
-//        String state = intent.getStringExtra("state");
-//        if (state.equals("available") && snackBarDisplayed) {
-//            snackBar.dismiss();
-//            snackBarDisplayed = false;
-//            getCredentialsFromAPI();
-//        } else if (state.equals("unavailable") && !snackBarDisplayed) {
-//            snackBar = Snackbar.make(coordinatorLayout, "Connection Lost", Snackbar.LENGTH_INDEFINITE);
-//            View sbView = snackBar.getView();
-//            sbView.setBackgroundColor(ContextCompat.getColor(context, R.color.snackbarBackgroundColor));
-//            snackBar.show();
-//            snackBarDisplayed = true;
-//        }
-//        }
-//    };
+    BroadcastReceiver broadcastReceiver = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+        String state = intent.getStringExtra("state");
+        if (state.equals("available") && snackBarDisplayed) {
+            snackBar.dismiss();
+            snackBarDisplayed = false;
+            getCredentialsFromAPI();
+        } else if (state.equals("unavailable") && !snackBarDisplayed) {
+            snackBar = Snackbar.make(coordinatorLayout, "Connection Lost", Snackbar.LENGTH_INDEFINITE);
+            View sbView = snackBar.getView();
+            sbView.setBackgroundColor(ContextCompat.getColor(context, R.color.snackbarBackgroundColor));
+            snackBar.show();
+            snackBarDisplayed = true;
+        }
+        }
+    };
 
 
     @Override
@@ -142,7 +134,6 @@ public class MainActivity extends AppCompatActivity implements MyAdapter.ItemCli
         // automatically handle clicks on the Home/Up button, so long
         // as you specify a parent activity in AndroidManifest.xml.
         int id = item.getItemId();
-
         //noinspection SimplifiableIfStatement
         if (id == R.id.action_settings) {
             return true;
@@ -170,7 +161,6 @@ public class MainActivity extends AppCompatActivity implements MyAdapter.ItemCli
 
                 private void methodToHoldUntilResponseArrived(JSONArray response){
                     try {
-//                        JSONArray authors = response.getJSONArray("authors");
                         for (int i = 0; i < response.length(); i++) {
                             JSONObject obj = (JSONObject) response.get(i);
 
@@ -209,13 +199,10 @@ public class MainActivity extends AppCompatActivity implements MyAdapter.ItemCli
     @Override
     public void onItemClick(View view, int position) {
         if (dataAvailable) {
-//            Log.d("CredentialsApp", "onItemClick()");
             Intent intent = new Intent(MainActivity.this, CredentialActivity.class);
-//            Log.d("CredentialsApp", credentialList.get(position).toJSON().toString());
-//            Log.d("CredentialsApp", "onItemClick()");
             intent.putExtra("credential", credentialList.get(position).toJSON().toString());
 //            unregisterReceiver(this.connectivityChecker);
-//            unregisterReceiver(broadcastReceiver);
+            unregisterReceiver(broadcastReceiver);
             startActivity(intent);
         }
     }

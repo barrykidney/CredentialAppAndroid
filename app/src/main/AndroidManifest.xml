@@ -24,6 +24,7 @@
             </intent-filter>
         </activity>
         <activity android:name=".CredentialActivity"></activity>
+        <activity android:name=".AddCredentialActivity"></activity>
     </application>
 
 </manifest>

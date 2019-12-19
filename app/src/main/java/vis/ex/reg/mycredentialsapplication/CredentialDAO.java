@@ -26,4 +26,7 @@ public interface CredentialDAO {
 
     @Query("DELETE FROM Credential")
     void deleteAllCredentials();
+
+    @Query("DELETE FROM Credential WHERE Credential_ID = :credential_id")
+    void deleteCredential(int credential_id);
 }
