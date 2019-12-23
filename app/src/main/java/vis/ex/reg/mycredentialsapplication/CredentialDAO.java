@@ -18,6 +18,9 @@ public interface CredentialDAO {
     @Query("SELECT * FROM Credential")
     public List<Credential> getAllCredentials();
 
+    @Query("SELECT Credential_ID, DateLastModified, ServiceName, Note, Active FROM Credential")
+    public List<CredentialDTO> getAllCredentialsSummary();
+
     @Query("SELECT * FROM Credential WHERE Credential_ID = :credential_id")
     public List<Credential> getCredentialById(int credential_id);
 

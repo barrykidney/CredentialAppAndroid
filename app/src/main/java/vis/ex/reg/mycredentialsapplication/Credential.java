@@ -52,4 +52,187 @@ public class Credential {
         }
         return jsonObject;
     }
+
+    public static class CredentialBuilder {
+
+        private int nestedCredential_ID;
+        private String nestedServiceName;
+        private String nestedServiceUrl;
+        private String nestedUsername;
+        private String nestedEmail;
+        private String nestedEncodedPassword;
+        private String nestedDateLastModified;
+        private String nestedNote;
+        private boolean nestedActive;
+
+        public CredentialBuilder(final int Credential_ID) {
+            this.nestedCredential_ID = Credential_ID;
+        }
+
+        public CredentialBuilder ServiceName(String ServiceName) {
+            this.nestedServiceName = ServiceName;
+            return this;
+        }
+
+        public CredentialBuilder ServiceUrl(String ServiceUrl) {
+            this.nestedServiceUrl = ServiceUrl;
+            return this;
+        }
+
+        public CredentialBuilder Username(String Username) {
+            this.nestedUsername = Username;
+            return this;
+        }
+
+        public CredentialBuilder Email(String Email) {
+            this.nestedEmail = Email;
+            return this;
+        }
+
+        public CredentialBuilder EncodedPassword(String EncodedPassword) {
+            this.nestedEncodedPassword = EncodedPassword;
+            return this;
+        }
+
+        public CredentialBuilder DateLastModified(String DateLastModified) {
+            this.nestedDateLastModified = DateLastModified;
+            return this;
+        }
+
+        public CredentialBuilder Note(String Note) {
+            this.nestedNote = Note;
+            return this;
+        }
+
+        public CredentialBuilder Active(boolean Active) {
+            this.nestedActive = Active;
+            return this;
+        }
+
+        public Credential createCredential() {
+            return new Credential(
+                nestedCredential_ID, nestedServiceName, nestedServiceUrl, nestedUsername, nestedEmail,
+                nestedEncodedPassword, nestedDateLastModified, nestedNote, nestedActive);
+        }
+    }
 }
+
+
+//        public Builder(int Credential_ID) {
+//            this.Credential_ID = Credential_ID;
+//        }
+//
+//        public Builder withServiceName(String ServiceName){
+//            this.ServiceName = ServiceName;
+//            return this;  //By returning the builder each time, we can create a fluent interface.
+//        }
+//
+//        public Builder withServiceUrl(String ServiceUrl){
+//            this.ServiceUrl = ServiceUrl;
+//            return this;
+//        }
+//
+//        public Builder withUsername(String Username){
+//            this.Username = Username;
+//            return this;
+//        }
+//
+//        public Builder withEmail(String Email){
+//            this.Email = Email;
+//            return this;
+//        }
+//
+//        public Builder withEncodedPassword(String EncodedPassword){
+//            this.EncodedPassword = EncodedPassword;
+//            return this;
+//        }
+//
+//        public Builder withDateLastModified(String DateLastModified){
+//            this.ServiceUrl = DateLastModified;
+//            return this;
+//        }
+//
+//        public Builder withNote(String Note){
+//            this.Note = Note;
+//            return this;
+//        }
+//
+//        public Builder withActive(boolean Active){
+//            this.Active = Active;
+//            return this;
+//        }
+//
+//        public Credential build() {
+//            Credential credential = new Credential();  //Since the builder is in the BankAccount class, we can invoke its private constructor.
+//            credential.Credential_ID = this.Credential_ID;
+//            credential.ServiceName = this.ServiceName;
+//            credential.ServiceUrl = this.ServiceUrl;
+//            credential.Username = this.Username;
+//            credential.Email = this.Email;
+//            credential.EncodedPassword = this.EncodedPassword;
+//            credential.DateLastModified = this.DateLastModified;
+//            credential.Note = this.Note;
+//            credential.Active = this.Active;
+//            return credential;
+//        }
+//
+//        private Credential() {
+//            //Constructor is now private.
+//        }
+//
+//        }
+//
+////    public void setCredential_ID(int credential_ID) {
+////        Credential_ID = credential_ID;
+////    }
+////
+////    public void setServiceName(String serviceName) {
+////        ServiceName = serviceName;
+////    }
+////
+////    public void setServiceUrl(String serviceUrl) {
+////        ServiceUrl = serviceUrl;
+////    }
+////
+////    public void setUsername(String username) {
+////        Username = username;
+////    }
+////
+////    public void setEmail(String email) {
+////        Email = email;
+////    }
+////
+////    public void setEncodedPassword(String encodedPassword) {
+////        EncodedPassword = encodedPassword;
+////    }
+////
+////    public void setDateLastModified(String dateLastModified) {
+////        DateLastModified = dateLastModified;
+////    }
+////
+////    public void setNote(String note) {
+////        Note = note;
+////    }
+////
+////    public void setActive(boolean active) {
+////        Active = active;
+////    }
+//
+//    public JSONObject toJSON() {
+//        JSONObject jsonObject = new JSONObject();
+//        try {
+//            jsonObject.put("id", this.Credential_ID);
+//            jsonObject.put("serviceName", this.ServiceName);
+//            jsonObject.put("serviceUrl", this.ServiceUrl);
+//            jsonObject.put("username", this.Username);
+//            jsonObject.put("email", this.Email);
+//            jsonObject.put("encodedPassword", this.EncodedPassword);
+//            jsonObject.put("dateLastModified", this.DateLastModified);
+//            jsonObject.put("note", this.Note);
+//            jsonObject.put("active", this.Active);
+//        } catch(JSONException e) {
+//            Log.e("CredentialsApp", e.getMessage());
+//        }
+//        return jsonObject;
+//    }
+//}

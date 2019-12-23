@@ -25,6 +25,7 @@ import com.android.volley.Request;
 import com.android.volley.RequestQueue;
 import com.android.volley.Response;
 import com.android.volley.VolleyError;
+import com.android.volley.toolbox.JsonObjectRequest;
 import com.android.volley.toolbox.StringRequest;
 import com.android.volley.toolbox.Volley;
 
@@ -40,6 +41,7 @@ import static java.lang.Integer.parseInt;
 
 public class MainActivity extends AppCompatActivity implements MyAdapter.ItemClickListener {
 
+    private List<CredentialDTO> credentialDTOList  = new ArrayList<>();
     private List<Credential> credentialList  = new ArrayList<>();
     private AppDatabase database;
     private RecyclerView recyclerView;
@@ -90,14 +92,14 @@ public class MainActivity extends AppCompatActivity implements MyAdapter.ItemCli
 
         // if connected get data from API, compare dateLastModified with date from local DB and
         // update relevant data. If not connected get data from DB.
-        UpdateViewAsync updateViewAsync = new UpdateViewAsync();
-        updateViewAsync.execute();
+
 
         if (internetConnection) {
             getCredentialsFromAPI();
         } else {
-            Log.e("CredentialsApp", "OnCreate: no connection");
             // Load date from local DB and display
+            // UpdateViewAsync updateViewAsync = new UpdateViewAsync();
+            // updateViewAsync.execute();
         }
     }
 
@@ -145,8 +147,6 @@ public class MainActivity extends AppCompatActivity implements MyAdapter.ItemCli
     private void getCredentialsFromAPI() {
         RequestQueue queue = Volley.newRequestQueue(this);
         String url = getResources().getString(R.string.api_url) + "/credentials/";
-
-        // Request a string response from the provided URL.
         StringRequest stringRequest = new StringRequest(Request.Method.GET, url,
             new Response.Listener<String>() {
                 @Override
@@ -163,38 +163,27 @@ public class MainActivity extends AppCompatActivity implements MyAdapter.ItemCli
                     try {
                         for (int i = 0; i < response.length(); i++) {
                             JSONObject obj = (JSONObject) response.get(i);
-
-                            credentialList.add(new Credential(Integer.valueOf(obj.getString("id")),
+                            credentialDTOList.add(new CredentialDTO(Integer.valueOf(obj.getString("id")),
                                                                 obj.getString("serviceName"),
-                                                                obj.getString("serviceUrl"),
-                                                                obj.getString("username"),
-                                                                obj.getString("email"),
-                                                                obj.getString("encodedPassword"),
                                                                 obj.getString("dateLastModified"),
-                                                                obj.getString("note"),
                                                                 Boolean.valueOf(obj.getString("active"))));
                         }
                     } catch(JSONException e) {
                         Log.e("CredentialsApp", "unexpected JSON exception", e);
                     }
                     UpdateDBAsync updateDBAsync = new UpdateDBAsync();
-                    updateDBAsync.execute(credentialList.toArray(new Credential[0]));
+                    updateDBAsync.execute(credentialDTOList.toArray(new CredentialDTO[0]));
                 }
             }, new Response.ErrorListener() {
             @Override
             public void onErrorResponse(VolleyError error) {
-                Log.d("CredentialsApp", "onErrorResponse()");
+                Log.e("CredentialsApp", "onErrorResponse()");
             }
         });
-        // Add the request to the RequestQueue.
         queue.add(stringRequest);
     }
 
-    private void populateRecyclerView(List<Credential> list) {
-        MyAdapter adapter = new MyAdapter(this, list);
-        adapter.setClickListener(this);
-        recyclerView.setAdapter(adapter);
-    }
+
 
     @Override
     public void onItemClick(View view, int position) {
@@ -215,11 +204,10 @@ public class MainActivity extends AppCompatActivity implements MyAdapter.ItemCli
         startActivity(startMain);
     }
 
-    class UpdateDBAsync extends AsyncTask<Credential, Void, Integer> {
+    class UpdateDBAsync extends AsyncTask<CredentialDTO, Void, Integer> {
 
         @Override
         protected void onPostExecute(Integer result){
-            Log.d("CredentialsApp", "UpdateDBAsync : onPostExecute()");
             if (result == 1) {
                 UpdateViewAsync updateViewAsync = new UpdateViewAsync();
                 updateViewAsync.execute();
@@ -227,9 +215,35 @@ public class MainActivity extends AppCompatActivity implements MyAdapter.ItemCli
         }
 
         @Override
-        protected Integer doInBackground(Credential... params) {
-            for(Credential a : params) {
-                database.credentialDAO().addCredential(a);
+        protected Integer doInBackground(CredentialDTO... params) {
+            List<Credential> localCredentialObjs = database.credentialDAO().getAllCredentials();
+            List<Integer> remoteIds = new ArrayList<>();
+
+            for(CredentialDTO credentialDTO : params) {
+                Integer id = credentialDTO.Credential_ID;
+                remoteIds.add(id);
+                List<Credential> localCredentials = database.credentialDAO().getCredentialById(id);
+
+                if (localCredentials.isEmpty()) {
+                    updateLocalCredential(id); // add this credential to database
+                } else {
+                    Credential localCredential = localCredentials.get(0);
+
+                    long remoteDateModified = Long.valueOf(credentialDTO.DateLastModified);
+                    long localDateModified = Long.valueOf(localCredential.DateLastModified);
+
+                    if (remoteDateModified > localDateModified) {
+                        updateLocalCredential(id); // remote is newer
+                    } else if (localDateModified > remoteDateModified) {
+                        updateRemoteCredential(localCredential.toJSON()); // local is newer update remote
+                    }
+                }
+            }
+            for(Credential localCredential : localCredentialObjs) {
+                Integer id = localCredential.Credential_ID;
+                if (!remoteIds.contains(id)) {
+                    updateRemoteCredential(localCredential.toJSON());
+                }
             }
             return 1;
         }
@@ -240,7 +254,6 @@ public class MainActivity extends AppCompatActivity implements MyAdapter.ItemCli
 
         @Override
         protected void onPostExecute(List<Credential> result) {
-            Log.d("CredentialsApp", "UpdateViewAsync : onPostExecute()");
             if (result.size() > 0) {
                 credentialList = result;
                 dataAvailable = true;
@@ -254,5 +267,71 @@ public class MainActivity extends AppCompatActivity implements MyAdapter.ItemCli
         protected List<Credential> doInBackground(Void... params) {
             return database.credentialDAO().getAllCredentials();
         }
+    }
+
+    private void updateLocalCredential(Integer id) {
+        RequestQueue queue = Volley.newRequestQueue(this);
+        String url = getResources().getString(R.string.api_url) + "/credentials/" + id;
+        StringRequest stringRequest = new StringRequest(Request.Method.GET, url,
+            new Response.Listener<String>() {
+                @Override
+                public void onResponse(String response) {
+                    try {
+                        methodToHoldUntilResponseArrived(new JSONObject(response));
+                    } catch (java.lang.Throwable e) {
+                        Log.e("CredentialsApp", "unexpected JSON exception", e);
+                    }
+                }
+
+                private void methodToHoldUntilResponseArrived(JSONObject obj){
+                    try {
+                        String serviceName = (obj.has("serviceName") ? obj.getString("serviceName") : "" );
+                        String serviceUrl = (obj.has("serviceUrl") ? obj.getString("serviceUrl") : "" );
+                        String username = (obj.has("username") ? obj.getString("username") : "" );
+                        String email = (obj.has("email") ? obj.getString("email") : "" );
+                        String password = (obj.has("password") ? obj.getString("password") : "" );
+                        String note = (obj.has("note") ? obj.getString("note") : "" );
+
+                        Credential updatedCredential = new Credential(
+                            Integer.valueOf(obj.getString("id")), serviceName, serviceUrl, username, email,
+                            password, obj.getString("dateLastModified"), note, obj.getBoolean("active"));
+
+                        database.credentialDAO().addCredential(updatedCredential);
+                    } catch(JSONException e) {
+                        Log.e("CredentialsApp", "unexpected JSON exception", e);
+                    }
+                }
+            }, new Response.ErrorListener() {
+            @Override
+            public void onErrorResponse(VolleyError error) {
+                Log.e("CredentialsApp", "getCredentialById : onErrorResponse()");
+            }
+        });
+        queue.add(stringRequest);
+    }
+
+    private void updateRemoteCredential(JSONObject jsonObject) {
+        RequestQueue queue = Volley.newRequestQueue(this);
+        String url = getResources().getString(R.string.api_url) + "/credentials/";
+
+        JsonObjectRequest request = new JsonObjectRequest(Request.Method.POST, url, jsonObject,
+            new Response.Listener<JSONObject>() {
+                @Override
+                public void onResponse(JSONObject response) {
+                    Log.d("CredentialsApp", "Credential on Remote has been updated");
+                }
+            }, new Response.ErrorListener() {
+            @Override
+            public void onErrorResponse(VolleyError error) {
+                Log.e("CredentialsApp", error.getMessage());
+            }
+        });
+        queue.add(request);
+    }
+
+    private void populateRecyclerView(List<Credential> list) {
+        MyAdapter adapter = new MyAdapter(this, list);
+        adapter.setClickListener(this);
+        recyclerView.setAdapter(adapter);
     }
 }
