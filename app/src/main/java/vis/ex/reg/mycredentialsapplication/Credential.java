@@ -22,6 +22,8 @@ public class Credential {
     public String Note;
     public boolean Active;
 
+    public Credential() {}
+
     public Credential(int Credential_ID, String ServiceName, String ServiceUrl, String Username, String Email,
                       String EncodedPassword, String DateLastModified, String Note, boolean Active) {
         this.Credential_ID = Credential_ID;

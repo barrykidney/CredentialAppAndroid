@@ -30,7 +30,7 @@ import org.json.JSONObject;
 
 public class CredentialActivity extends AppCompatActivity {
 
-    private String credentialId;
+    private Credential credential;
     private TextView serviceNameTextView;
     private TextView serviceUrlTextView;
     private TextView usernameTextView;
@@ -75,19 +75,31 @@ public class CredentialActivity extends AppCompatActivity {
         // Get the transferred data from source activity.
         Intent intent = getIntent();
         try {
-            JSONObject credentialJson = new JSONObject(intent.getStringExtra("credential"));
-            credentialId = credentialJson.getString("id");
-            populateCredentialView(credentialJson);
+            JSONObject obj = new JSONObject(intent.getStringExtra("credential"));
+            Log.d("CredentialsApp", obj.toString());
+
+            String serviceName = (obj.has("serviceName") ? obj.getString("serviceName") : "" );
+            String serviceUrl = (obj.has("serviceUrl") ? obj.getString("serviceUrl") : "" );
+            String username = (obj.has("username") ? obj.getString("username") : "" );
+            String email = (obj.has("email") ? obj.getString("email") : "" );
+            String password = (obj.has("password") ? obj.getString("password") : "" );
+            String note = (obj.has("note") ? obj.getString("note") : "" );
+
+            credential = new Credential(Integer.valueOf(obj.getString("id")), serviceName, serviceUrl, username,
+                email, password, obj.getString("dateLastModified"), note, obj.getBoolean("active"));
+
+            populateCredentialView(obj);
         } catch (JSONException error) {
             Log.e("CredentialsApp", error.getMessage());
         }
 
-        FloatingActionButton addCredentialButton = findViewById(R.id.saveCredential);
-        addCredentialButton.setOnClickListener(new View.OnClickListener() {
+        FloatingActionButton editCredentialButton = findViewById(R.id.saveCredential);
+        editCredentialButton.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
                 Snackbar.make(view, "Replace with your own action", Snackbar.LENGTH_LONG)
                     .setAction("Action", null).show();
+                editCredential();
             }
         });
 
@@ -95,11 +107,10 @@ public class CredentialActivity extends AppCompatActivity {
         deleteCredentialButton.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
-                Log.d("CredentialsApp", "deleteCredentialButton");
                 Snackbar.make(view, "Deleting credential", Snackbar.LENGTH_LONG)
                     .setAction("Action", null).show();
 
-                deleteCredentialViaAPI(credentialId);
+                deleteCredential(String.valueOf(credential.Credential_ID));
             }
         });
     }
@@ -142,7 +153,15 @@ public class CredentialActivity extends AppCompatActivity {
         finish();
     }
 
-    private void deleteCredentialViaAPI(final String credentialId) {
+    private void editCredential() {
+        Intent intent = new Intent(CredentialActivity.this, AddCredentialActivity.class);
+        intent.putExtra("credential", credential.toJSON().toString());
+        // unregisterReceiver(this.connectivityChecker);
+        unregisterReceiver(broadcastReceiver);
+        startActivity(intent);
+    }
+
+    private void deleteCredential(final String credentialId) {
         RequestQueue queue = Volley.newRequestQueue(this);
         String url = getResources().getString(R.string.api_url) + "/credentials/" + credentialId;
 
@@ -167,13 +186,16 @@ public class CredentialActivity extends AppCompatActivity {
         queue.add(request);
     }
 
+//    private void deleteCredentialFromLocalDB(final int credentialId) {
+//        database.credentialDAO().deleteCredential(credentialId);
+//    }
+
+
     class UpdateDBAsync extends AsyncTask<Integer, Void, Integer> {
 
         @Override
         protected Integer doInBackground(Integer... params) {
-            Log.d("CredentialsApp", "doInBackground()");
             database.credentialDAO().deleteCredential(params[0]);
-            Log.d("CredentialsApp", "doInBackground()");
             return 1;
         }
     }

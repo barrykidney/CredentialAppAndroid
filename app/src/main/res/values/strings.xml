@@ -1,8 +1,9 @@
 <resources>
     <string name="app_name">MyCredentialsApplication</string>
     <string name="action_settings">Settings</string>
-    <string name="api_url">http://63.35.237.78:8080</string>
+    <string name="api_url">http://54.171.167.58:8080</string>
     <string name="not_avail">Information currently unavailable</string>
+    <string name="device_number">1</string>
 
     <string name="serviceName_default">Service Name: no data</string>
     <string name="serviceUrl_default">Service Url: no data</string>

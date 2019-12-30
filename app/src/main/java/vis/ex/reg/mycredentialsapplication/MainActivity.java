@@ -41,6 +41,7 @@ import static java.lang.Integer.parseInt;
 
 public class MainActivity extends AppCompatActivity implements MyAdapter.ItemClickListener {
 
+    private int highestCredentialIndex;
     private List<CredentialDTO> credentialDTOList  = new ArrayList<>();
     private List<Credential> credentialList  = new ArrayList<>();
     private AppDatabase database;
@@ -51,6 +52,7 @@ public class MainActivity extends AppCompatActivity implements MyAdapter.ItemCli
     private Snackbar snackBar;
     private CoordinatorLayout coordinatorLayout;
 
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -58,17 +60,23 @@ public class MainActivity extends AppCompatActivity implements MyAdapter.ItemCli
         Toolbar toolbar = findViewById(R.id.toolbar);
         setSupportActionBar(toolbar);
 
+        highestCredentialIndex = 0;
+
         coordinatorLayout = findViewById(R.id.credentials_page);
 
-        FloatingActionButton searchButton = findViewById(R.id.search);
-        searchButton.setOnClickListener(new View.OnClickListener() {
+        FloatingActionButton addCredentialButton = findViewById(R.id.addCredential);
+        addCredentialButton.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
 //                Snackbar.make(view, "Replace with your own action", Snackbar.LENGTH_LONG)
 //                    .setAction("Action", null).show();
 
                 Intent intent = new Intent(MainActivity.this, AddCredentialActivity.class);
+//                intent.putExtra("credential", "addCredential");
+                intent.putExtra("action", "addCredential");
+                intent.putExtra("highestCredentialIndex", String.valueOf(highestCredentialIndex));
 //                unregisterReceiver(this.connectivityChecker);
+                Log.d("CredentialsApp", "MainActivity, highestCredentialIndex: " + highestCredentialIndex);
                 unregisterReceiver(broadcastReceiver);
                 startActivity(intent);
             }
@@ -155,7 +163,7 @@ public class MainActivity extends AppCompatActivity implements MyAdapter.ItemCli
                         JSONArray credentialArray = new JSONArray(response);
                         methodToHoldUntilResponseArrived(credentialArray);
                     } catch (java.lang.Throwable e) {
-                        Log.e("CredentialsApp", "unexpected JSON exception", e);
+                        Log.e("CredentialsApp", "MainActivity, getCredentialsFromAPI, unexpected JSON exception", e);
                     }
                 }
 
@@ -169,7 +177,7 @@ public class MainActivity extends AppCompatActivity implements MyAdapter.ItemCli
                                                                 Boolean.valueOf(obj.getString("active"))));
                         }
                     } catch(JSONException e) {
-                        Log.e("CredentialsApp", "unexpected JSON exception", e);
+                        Log.e("CredentialsApp", "MainActivity, unexpected JSON exception", e);
                     }
                     UpdateDBAsync updateDBAsync = new UpdateDBAsync();
                     updateDBAsync.execute(credentialDTOList.toArray(new CredentialDTO[0]));
@@ -177,7 +185,7 @@ public class MainActivity extends AppCompatActivity implements MyAdapter.ItemCli
             }, new Response.ErrorListener() {
             @Override
             public void onErrorResponse(VolleyError error) {
-                Log.e("CredentialsApp", "onErrorResponse()");
+                Log.e("CredentialsApp", "MainActivity, getCredentialsFromAPI: onErrorResponse(), " + error.getMessage());
             }
         });
         queue.add(stringRequest);
@@ -189,6 +197,7 @@ public class MainActivity extends AppCompatActivity implements MyAdapter.ItemCli
     public void onItemClick(View view, int position) {
         if (dataAvailable) {
             Intent intent = new Intent(MainActivity.this, CredentialActivity.class);
+            intent.putExtra("action", "viewCredential");
             intent.putExtra("credential", credentialList.get(position).toJSON().toString());
 //            unregisterReceiver(this.connectivityChecker);
             unregisterReceiver(broadcastReceiver);
@@ -221,6 +230,10 @@ public class MainActivity extends AppCompatActivity implements MyAdapter.ItemCli
 
             for(CredentialDTO credentialDTO : params) {
                 Integer id = credentialDTO.Credential_ID;
+                if (id > highestCredentialIndex) {
+                    highestCredentialIndex = id;
+                }
+
                 remoteIds.add(id);
                 List<Credential> localCredentials = database.credentialDAO().getCredentialById(id);
 
@@ -241,6 +254,10 @@ public class MainActivity extends AppCompatActivity implements MyAdapter.ItemCli
             }
             for(Credential localCredential : localCredentialObjs) {
                 Integer id = localCredential.Credential_ID;
+                if (id > highestCredentialIndex) {
+                    highestCredentialIndex = id;
+                }
+
                 if (!remoteIds.contains(id)) {
                     updateRemoteCredential(localCredential.toJSON());
                 }
@@ -258,7 +275,7 @@ public class MainActivity extends AppCompatActivity implements MyAdapter.ItemCli
                 credentialList = result;
                 dataAvailable = true;
             } else {
-                Log.e("CredentialsApp", "No information available.");
+                Log.e("CredentialsApp", "MainActivity, UpdateViewAsync, No information available.");
                 dataAvailable = false;
             }
             populateRecyclerView(result);
@@ -269,6 +286,7 @@ public class MainActivity extends AppCompatActivity implements MyAdapter.ItemCli
         }
     }
 
+    // Refactor this into 2 methods getCredentialViaApi and updateCredentialInLocalDB
     private void updateLocalCredential(Integer id) {
         RequestQueue queue = Volley.newRequestQueue(this);
         String url = getResources().getString(R.string.api_url) + "/credentials/" + id;
@@ -279,7 +297,7 @@ public class MainActivity extends AppCompatActivity implements MyAdapter.ItemCli
                     try {
                         methodToHoldUntilResponseArrived(new JSONObject(response));
                     } catch (java.lang.Throwable e) {
-                        Log.e("CredentialsApp", "unexpected JSON exception", e);
+                        Log.e("CredentialsApp", "MainActivity, updateLocalCredential, unexpected JSON exception", e);
                     }
                 }
 
@@ -298,13 +316,13 @@ public class MainActivity extends AppCompatActivity implements MyAdapter.ItemCli
 
                         database.credentialDAO().addCredential(updatedCredential);
                     } catch(JSONException e) {
-                        Log.e("CredentialsApp", "unexpected JSON exception", e);
+                        Log.e("CredentialsApp", "MainActivity, getCredentialById, unexpected JSON exception", e);
                     }
                 }
             }, new Response.ErrorListener() {
             @Override
             public void onErrorResponse(VolleyError error) {
-                Log.e("CredentialsApp", "getCredentialById : onErrorResponse()");
+                Log.e("CredentialsApp", "MainActivity, getCredentialById : onErrorResponse()");
             }
         });
         queue.add(stringRequest);
@@ -313,6 +331,7 @@ public class MainActivity extends AppCompatActivity implements MyAdapter.ItemCli
     private void updateRemoteCredential(JSONObject jsonObject) {
         RequestQueue queue = Volley.newRequestQueue(this);
         String url = getResources().getString(R.string.api_url) + "/credentials/";
+        Log.d("CredentialsApp", "jsonObject: " + jsonObject.toString());
 
         JsonObjectRequest request = new JsonObjectRequest(Request.Method.POST, url, jsonObject,
             new Response.Listener<JSONObject>() {
@@ -323,7 +342,7 @@ public class MainActivity extends AppCompatActivity implements MyAdapter.ItemCli
             }, new Response.ErrorListener() {
             @Override
             public void onErrorResponse(VolleyError error) {
-                Log.e("CredentialsApp", error.getMessage());
+                Log.e("CredentialsApp", "MainActivity, updateRemoteCredential, Error message: " + error.getMessage());
             }
         });
         queue.add(request);

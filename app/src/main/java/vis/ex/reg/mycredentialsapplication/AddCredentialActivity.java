@@ -29,12 +29,23 @@ import org.json.JSONObject;
 
 public class AddCredentialActivity extends AppCompatActivity {
 
+    private int highestCredentialIndex;
     private AppDatabase database;
     private boolean internetConnection;
     private CheckConnectivity connectivityChecker;
+
+    private int credentialID = -1;
+    private String dateLastModified;
+
     private boolean snackBarDisplayed;
     private Snackbar snackBar;
     private ConstraintLayout coordinatorLayout;
+    private EditText serviceNameEditText;
+    private EditText serviceUrlEditText;
+    private EditText usernameEditText;
+    private EditText emailEditText;
+    private EditText passwordEditText;
+    private EditText noteEditText;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -44,8 +55,7 @@ public class AddCredentialActivity extends AppCompatActivity {
         coordinatorLayout = findViewById(R.id.add_credential_page);
         connectivityChecker = new CheckConnectivity();
 
-        ConnectivityManager connectivityManager =
-            (ConnectivityManager) getSystemService(Context.CONNECTIVITY_SERVICE);
+        ConnectivityManager connectivityManager = (ConnectivityManager) getSystemService(Context.CONNECTIVITY_SERVICE);
         internetConnection = (connectivityManager
             .getNetworkInfo(ConnectivityManager.TYPE_MOBILE)
             .getState() == NetworkInfo.State.CONNECTED || connectivityManager
@@ -57,6 +67,46 @@ public class AddCredentialActivity extends AppCompatActivity {
 
         database = AppDatabase.getDatabase(getApplicationContext());
 
+        serviceNameEditText = findViewById(R.id.addServiceName);
+        serviceUrlEditText = findViewById(R.id.addServiceUrl);
+        usernameEditText = findViewById(R.id.addUsername);
+        emailEditText = findViewById(R.id.addEmail);
+        passwordEditText = findViewById(R.id.addPassword);
+        noteEditText = findViewById(R.id.addNotes);
+
+        Intent intent = getIntent();
+        if (intent.getStringExtra("action").equals("view credential")) {
+            try {
+                JSONObject obj = new JSONObject(intent.getStringExtra("credential"));
+                credentialID = Integer.valueOf(obj.getString("id"));
+                dateLastModified = obj.getString("dateLastModified");
+
+                if (obj.has("serviceName")) {
+                    serviceNameEditText.setText(obj.getString("serviceName"));
+                }
+                if (obj.has("serviceUrl")) {
+                    serviceUrlEditText.setText(obj.getString("serviceUrl"));
+                }
+                if (obj.has("username")) {
+                    usernameEditText.setText(obj.getString("username"));
+                }
+                if (obj.has("email")) {
+                    emailEditText.setText(obj.getString("email"));
+                }
+                if (obj.has("password")) {
+                    passwordEditText.setText(obj.getString("password"));
+                }
+                if (obj.has("note")) {
+                    noteEditText.setText(obj.getString("note"));
+                }
+                // populateCredentialView(obj); // make the above code into a method and pass a credential object
+            } catch (JSONException error) {
+                Log.e("CredentialsApp", "AddCredentialActivity, onCreate, JSONObj: "  + error.getMessage());
+            }
+        } else {
+            highestCredentialIndex = Integer.valueOf(intent.getStringExtra("highestCredentialIndex"));
+        }
+
         FloatingActionButton addCredentialButton = findViewById(R.id.saveCredential);
         addCredentialButton.setOnClickListener(new View.OnClickListener() {
             @Override
@@ -64,25 +114,38 @@ public class AddCredentialActivity extends AppCompatActivity {
                 Snackbar.make(view, "New credential saved", Snackbar.LENGTH_LONG)
                     .setAction("Action", null).show();
 
-                EditText serviceName = findViewById(R.id.addServiceName);
-                EditText serviceUrl = findViewById(R.id.addServiceUrl);
-                EditText username = findViewById(R.id.addUsername);
-                EditText email = findViewById(R.id.addEmail);
-                EditText password = findViewById(R.id.addPassword);
-                EditText note = findViewById(R.id.addNotes);
-
                 JSONObject jsonObject = new JSONObject();
                 try {
-                    jsonObject.put("serviceName", serviceName.getText().toString());
-                    jsonObject.put("serviceUrl", serviceUrl.getText().toString());
-                    jsonObject.put("username", username.getText().toString());
-                    jsonObject.put("email", email.getText().toString());
-                    jsonObject.put("encodedPassword", email.getText().toString());
-                    jsonObject.put("note", note.getText().toString());
+                    if (credentialID == -1) {
+                        credentialID = highestCredentialIndex + 1;
+//                        credentialID =
+//                            (highestCredentialIndex - (highestCredentialIndex % 10)) + 10
+//                                + Integer.valueOf(getResources().getString(R.string.device_number));
+                    }
+                    jsonObject.put("id", credentialID);
+                    jsonObject.put("id", credentialID);
+                    jsonObject.put("serviceName", serviceNameEditText.getText().toString());
+                    jsonObject.put("serviceUrl", serviceUrlEditText.getText().toString());
+                    jsonObject.put("username", usernameEditText.getText().toString());
+                    jsonObject.put("email", emailEditText.getText().toString());
+                    jsonObject.put("encodedPassword", passwordEditText.getText().toString());
+                    jsonObject.put("note", noteEditText.getText().toString());
+                    jsonObject.put("dateLastModified", String.valueOf(System.currentTimeMillis()));
+                    jsonObject.put("active", "true");
                 } catch(JSONException e) {
-                    Log.e("CredentialsApp", e.getMessage());
+                    Log.e("CredentialsApp", "AddCredentialActivity, onCreate FloatingAction: " + e.getMessage());
                 }
-                postNewCredentialToAPI(jsonObject);
+
+                postCredentialToAPI(jsonObject);
+//                Credential updatedCredential = convertJsonStringToCredentialObj(jsonObject);
+//                updateCredentialInLocalDB(updatedCredential);
+
+                Intent intent = new Intent(AddCredentialActivity.this, CredentialActivity.class);
+                intent.putExtra("action", "viewCredential");
+                intent.putExtra("credential", jsonObject.toString());
+//                unregisterReceiver(this.connectivityChecker);
+                unregisterReceiver(broadcastReceiver);
+                startActivity(intent);
             }
         });
     }
@@ -112,7 +175,31 @@ public class AddCredentialActivity extends AppCompatActivity {
         finish();
     }
 
-    private void postNewCredentialToAPI(JSONObject jsonObject) {
+    private Credential convertJsonStringToCredentialObj(JSONObject obj) {
+        Credential credential = new Credential();
+        try {
+            String serviceName = (obj.has("serviceName") ? obj.getString("serviceName") : "" );
+            String serviceUrl = (obj.has("serviceUrl") ? obj.getString("serviceUrl") : "" );
+            String username = (obj.has("username") ? obj.getString("username") : "" );
+            String email = (obj.has("email") ? obj.getString("email") : "" );
+            String password = (obj.has("password") ? obj.getString("password") : "" );
+            String note = (obj.has("note") ? obj.getString("note") : "" );
+
+            credential = new Credential(Integer.valueOf(obj.getString("id")),
+                serviceName, serviceUrl, username, email, password, obj.getString("dateLastModified"),
+                note, obj.getBoolean("active"));
+
+        } catch (JSONException error) {
+            Log.e("CredentialsApp", "AddCredentialActivity, convertJsonStringToCredentialObj: " + error.getMessage());
+        }
+        return credential;
+    }
+
+    private void updateCredentialInLocalDB(Credential updatedCredential) {
+        database.credentialDAO().addCredential(updatedCredential);
+    }
+
+    private void postCredentialToAPI(JSONObject jsonObject) {
         RequestQueue queue = Volley.newRequestQueue(this);
         String url = getResources().getString(R.string.api_url) + "/credentials/";
 
@@ -120,16 +207,14 @@ public class AddCredentialActivity extends AppCompatActivity {
             new Response.Listener<JSONObject>() {
                 @Override
                 public void onResponse(JSONObject response) {
-                    Intent intent = new Intent(AddCredentialActivity.this, CredentialActivity.class);
-                    intent.putExtra("credential", response.toString());
-//                    unregisterReceiver(this.connectivityChecker);
-                    unregisterReceiver(broadcastReceiver);
-                    startActivity(intent);
+                    Log.d("CredentialsApp", "Request sent" + response);
+                    Credential updatedCredential = convertJsonStringToCredentialObj(response);
+                    updateCredentialInLocalDB(updatedCredential);
                 }
             }, new Response.ErrorListener() {
             @Override
             public void onErrorResponse(VolleyError error) {
-                Log.e("CredentialsApp", error.getMessage());
+                Log.e("CredentialsApp", "AddCredentialActivity, updateCredentialInLocalDB" + error.getMessage());
             }
         });
         queue.add(request);
