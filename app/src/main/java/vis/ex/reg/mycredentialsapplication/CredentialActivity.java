@@ -93,7 +93,7 @@ public class CredentialActivity extends AppCompatActivity {
             Log.e("CredentialsApp", error.getMessage());
         }
 
-        FloatingActionButton editCredentialButton = findViewById(R.id.saveCredential);
+        FloatingActionButton editCredentialButton = findViewById(R.id.editCredential);
         editCredentialButton.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
@@ -147,7 +147,7 @@ public class CredentialActivity extends AppCompatActivity {
     @Override
     public void onBackPressed() {
         Intent intent = new Intent(CredentialActivity.this, MainActivity.class);
-        unregisterReceiver(this.connectivityChecker);
+//        unregisterReceiver(this.connectivityChecker);
         unregisterReceiver(broadcastReceiver);
         startActivity(intent);
         finish();
@@ -155,6 +155,7 @@ public class CredentialActivity extends AppCompatActivity {
 
     private void editCredential() {
         Intent intent = new Intent(CredentialActivity.this, AddCredentialActivity.class);
+        intent.putExtra("action", "viewCredential");
         intent.putExtra("credential", credential.toJSON().toString());
         // unregisterReceiver(this.connectivityChecker);
         unregisterReceiver(broadcastReceiver);

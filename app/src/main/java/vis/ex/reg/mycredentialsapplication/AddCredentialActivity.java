@@ -75,7 +75,7 @@ public class AddCredentialActivity extends AppCompatActivity {
         noteEditText = findViewById(R.id.addNotes);
 
         Intent intent = getIntent();
-        if (intent.getStringExtra("action").equals("view credential")) {
+        if (intent.getStringExtra("action").equals("viewCredential")) {
             try {
                 JSONObject obj = new JSONObject(intent.getStringExtra("credential"));
                 credentialID = Integer.valueOf(obj.getString("id"));
@@ -169,7 +169,7 @@ public class AddCredentialActivity extends AppCompatActivity {
     @Override
     public void onBackPressed() {
         Intent intent = new Intent(AddCredentialActivity.this, MainActivity.class);
-        unregisterReceiver(this.connectivityChecker);
+//        unregisterReceiver(this.connectivityChecker);
         unregisterReceiver(broadcastReceiver);
         startActivity(intent);
         finish();
