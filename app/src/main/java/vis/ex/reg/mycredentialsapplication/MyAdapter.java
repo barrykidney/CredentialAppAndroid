@@ -11,12 +11,12 @@ import java.util.List;
 
 public class MyAdapter extends RecyclerView.Adapter<MyAdapter.ViewHolder> {
 
-    private List<Credential> mData;
+    private List<CredentialSummaryDTO> mData;
     private LayoutInflater mInflater;
     private ItemClickListener mClickListener;
 
     // data is passed into the constructor
-    MyAdapter(Context context, List<Credential> data) {
+    MyAdapter(Context context, List<CredentialSummaryDTO> data) {
         this.mInflater = LayoutInflater.from(context);
         this.mData = data;
     }
@@ -31,8 +31,8 @@ public class MyAdapter extends RecyclerView.Adapter<MyAdapter.ViewHolder> {
     // binds the data to the TextView in each row
     @Override
     public void onBindViewHolder(ViewHolder holder, int position) {
-        Credential credentialObj = mData.get(position);
-        String serviceName = credentialObj.ServiceName + " " + credentialObj.DateLastModified;
+        CredentialSummaryDTO credentialObj = mData.get(position);
+        String serviceName = credentialObj.getServiceName();
         holder.myTextView.setText(serviceName);
     }
 
@@ -60,7 +60,7 @@ public class MyAdapter extends RecyclerView.Adapter<MyAdapter.ViewHolder> {
     }
 
     // convenience method for getting data at click position
-    Credential getItem(int id) {
+    public CredentialSummaryDTO getItem(int id) {
         return mData.get(id);
     }
 

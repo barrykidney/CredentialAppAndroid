@@ -1,5 +1,6 @@
 package vis.ex.reg.mycredentialsapplication;
 
+import android.app.SearchManager;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
@@ -7,8 +8,8 @@ import android.content.IntentFilter;
 import android.net.ConnectivityManager;
 import android.net.NetworkInfo;
 import android.os.AsyncTask;
+import android.os.Build;
 import android.os.Bundle;
-import android.support.design.widget.CoordinatorLayout;
 import android.support.design.widget.FloatingActionButton;
 import android.support.design.widget.Snackbar;
 import android.support.v4.content.ContextCompat;
@@ -17,41 +18,41 @@ import android.support.v7.widget.LinearLayoutManager;
 import android.support.v7.widget.RecyclerView;
 import android.support.v7.widget.Toolbar;
 import android.util.Log;
+import android.util.SparseArray;
+import android.view.Gravity;
+import android.view.MenuInflater;
 import android.view.View;
 import android.view.Menu;
 import android.view.MenuItem;
-
+import android.widget.SearchView;
+import android.widget.TextView;
+import com.android.volley.NetworkResponse;
 import com.android.volley.Request;
 import com.android.volley.RequestQueue;
 import com.android.volley.Response;
 import com.android.volley.VolleyError;
 import com.android.volley.toolbox.JsonObjectRequest;
 import com.android.volley.toolbox.StringRequest;
-import com.android.volley.toolbox.Volley;
-
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
-
 import java.util.ArrayList;
 import java.util.List;
-
-import static java.lang.Integer.parseInt;
 
 
 public class MainActivity extends AppCompatActivity implements MyAdapter.ItemClickListener {
 
-    private int highestCredentialIndex;
-    private List<CredentialDTO> credentialDTOList  = new ArrayList<>();
-    private List<Credential> credentialList  = new ArrayList<>();
+    private List<CredentialSummaryDTO> allCredentials = new ArrayList<>();
+    private List<CredentialSummaryDTO> credentialsToBeDisplayed = new ArrayList<>();
+    private CheckConnectivity connectivityMonitor;
     private AppDatabase database;
     private RecyclerView recyclerView;
-    private CheckConnectivity connectivityChecker;
-    private boolean dataAvailable;
-    private boolean snackBarDisplayed;
-    private Snackbar snackBar;
-    private CoordinatorLayout coordinatorLayout;
-
+    private Snackbar connectivitySnackBar;
+    private int highestCredentialIndex = 0;
+    private boolean connectivitySnackBarIsDisplayed;
+    private boolean reducedList = false;
+    private boolean connectionAvailable;
+    private RequestQueue queue;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -59,82 +60,67 @@ public class MainActivity extends AppCompatActivity implements MyAdapter.ItemCli
         setContentView(R.layout.activity_main);
         Toolbar toolbar = findViewById(R.id.toolbar);
         setSupportActionBar(toolbar);
+        if (getSupportActionBar() != null) {
+            getSupportActionBar().setDisplayShowTitleEnabled(false);
+        }
 
-        highestCredentialIndex = 0;
+        queue = VolleyController.getInstance(this.getApplicationContext()).getRequestQueue();
+        database = AppDatabase.getDatabase(getApplicationContext());
 
-        coordinatorLayout = findViewById(R.id.credentials_page);
+        recyclerView = findViewById(R.id.credentials_recycler_view);
+        recyclerView.setLayoutManager(new LinearLayoutManager(this));
+
+        connectivitySnackBar = initializeConnectivitySnackBar();
+        initializeConnectivityMonitor();
+        connectionAvailable = internetConnectionIsAvailable();
+
+        if (connectionAvailable) {
+            Log.e("CredentialsApp", "conn avail");
+            getAllCredentialsFromAPI(); // sync dbs and update view
+        } else {
+            UpdateViewAsync updateViewAsync = new UpdateViewAsync();
+            updateViewAsync.execute();
+        }
 
         FloatingActionButton addCredentialButton = findViewById(R.id.addCredential);
         addCredentialButton.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
-//                Snackbar.make(view, "Replace with your own action", Snackbar.LENGTH_LONG)
-//                    .setAction("Action", null).show();
-
-                Intent intent = new Intent(MainActivity.this, AddCredentialActivity.class);
-//                intent.putExtra("credential", "addCredential");
+                Intent intent = new Intent(MainActivity.this, EditCredentialActivity.class);
                 intent.putExtra("action", "addCredential");
                 intent.putExtra("highestCredentialIndex", String.valueOf(highestCredentialIndex));
-//                unregisterReceiver(this.connectivityChecker);
-                Log.d("CredentialsApp", "MainActivity, highestCredentialIndex: " + highestCredentialIndex);
+                unregisterReceiver(connectivityMonitor);
                 unregisterReceiver(broadcastReceiver);
                 startActivity(intent);
             }
         });
-
-        recyclerView = findViewById(R.id.credentials_recycler_view);
-        recyclerView.setLayoutManager(new LinearLayoutManager(this));
-        ConnectivityManager connectivityManager = (ConnectivityManager) getSystemService(Context.CONNECTIVITY_SERVICE);
-
-        boolean internetConnection = (connectivityManager
-            .getNetworkInfo(ConnectivityManager.TYPE_MOBILE)
-            .getState() == NetworkInfo.State.CONNECTED || connectivityManager
-            .getNetworkInfo(ConnectivityManager.TYPE_WIFI)
-            .getState() == NetworkInfo.State.CONNECTED);
-
-//        this.registerReceiver(this.connectivityChecker, new IntentFilter(ConnectivityManager.CONNECTIVITY_ACTION));
-        this.registerReceiver(broadcastReceiver, new IntentFilter("connection_change"));
-
-        // get instance of database
-        database = AppDatabase.getDatabase(getApplicationContext());
-
-        // if connected get data from API, compare dateLastModified with date from local DB and
-        // update relevant data. If not connected get data from DB.
-
-
-        if (internetConnection) {
-            getCredentialsFromAPI();
-        } else {
-            // Load date from local DB and display
-            // UpdateViewAsync updateViewAsync = new UpdateViewAsync();
-            // updateViewAsync.execute();
-        }
     }
 
-
-    BroadcastReceiver broadcastReceiver = new BroadcastReceiver() {
-        @Override
-        public void onReceive(Context context, Intent intent) {
-        String state = intent.getStringExtra("state");
-        if (state.equals("available") && snackBarDisplayed) {
-            snackBar.dismiss();
-            snackBarDisplayed = false;
-            getCredentialsFromAPI();
-        } else if (state.equals("unavailable") && !snackBarDisplayed) {
-            snackBar = Snackbar.make(coordinatorLayout, "Connection Lost", Snackbar.LENGTH_INDEFINITE);
-            View sbView = snackBar.getView();
-            sbView.setBackgroundColor(ContextCompat.getColor(context, R.color.snackbarBackgroundColor));
-            snackBar.show();
-            snackBarDisplayed = true;
+    @Override
+    protected void onNewIntent(Intent intent) {
+        setIntent(intent);
+        if (Intent.ACTION_SEARCH.equals(intent.getAction())) {
+            String query = intent.getStringExtra(SearchManager.QUERY);
+            credentialsToBeDisplayed.clear();
+            credentialsToBeDisplayed = searchCredentials(query);
+            reducedList = true;
+            populateRecyclerView(credentialsToBeDisplayed);
         }
-        }
-    };
-
+    }
 
     @Override
     public boolean onCreateOptionsMenu(Menu menu) {
         // Inflate the menu; this adds items to the action bar if it is present.
-        getMenuInflater().inflate(R.menu.menu_main, menu);
+        MenuInflater settingsInflater = getMenuInflater();
+        settingsInflater.inflate(R.menu.menu_main, menu);
+
+        MenuInflater searchInflater = getMenuInflater();
+        searchInflater.inflate(R.menu.options_menu, menu);
+        // Associate searchable configuration with the SearchView
+        SearchManager searchManager = (SearchManager) getSystemService(Context.SEARCH_SERVICE);
+        SearchView searchView = (SearchView) menu.findItem(R.id.search).getActionView();
+        searchView.setSearchableInfo(searchManager.getSearchableInfo(getComponentName()));
+
         return true;
     }
 
@@ -148,209 +134,369 @@ public class MainActivity extends AppCompatActivity implements MyAdapter.ItemCli
         if (id == R.id.action_settings) {
             return true;
         }
-
         return super.onOptionsItemSelected(item);
     }
 
-    private void getCredentialsFromAPI() {
-        RequestQueue queue = Volley.newRequestQueue(this);
+    private void getAllCredentialsFromAPI() {
         String url = getResources().getString(R.string.api_url) + "/credentials/";
-        StringRequest stringRequest = new StringRequest(Request.Method.GET, url,
-            new Response.Listener<String>() {
-                @Override
-                public void onResponse(String response) {
-                    try {
-                        JSONArray credentialArray = new JSONArray(response);
-                        methodToHoldUntilResponseArrived(credentialArray);
-                    } catch (java.lang.Throwable e) {
-                        Log.e("CredentialsApp", "MainActivity, getCredentialsFromAPI, unexpected JSON exception", e);
-                    }
-                }
 
-                private void methodToHoldUntilResponseArrived(JSONArray response){
-                    try {
-                        for (int i = 0; i < response.length(); i++) {
-                            JSONObject obj = (JSONObject) response.get(i);
-                            credentialDTOList.add(new CredentialDTO(Integer.valueOf(obj.getString("id")),
-                                                                obj.getString("serviceName"),
-                                                                obj.getString("dateLastModified"),
-                                                                Boolean.valueOf(obj.getString("active"))));
-                        }
-                    } catch(JSONException e) {
-                        Log.e("CredentialsApp", "MainActivity, unexpected JSON exception", e);
-                    }
-                    UpdateDBAsync updateDBAsync = new UpdateDBAsync();
-                    updateDBAsync.execute(credentialDTOList.toArray(new CredentialDTO[0]));
+        Response.Listener<String> responseListener = new Response.Listener<String>() {
+            @Override
+            public void onResponse(String response) {
+                try {
+                    JSONArray credentialArray = new JSONArray(response);
+                    methodToHoldUntilResponseArrived(credentialArray);
+                } catch (java.lang.Throwable e) {
+                    Log.e("CredentialsApp", "MainActivity:getAllCredentialsFromAPI, " + e.getMessage());
                 }
-            }, new Response.ErrorListener() {
+            }
+
+            private void methodToHoldUntilResponseArrived(JSONArray response){
+                List<CredentialSummaryDTO> allReomteCredentials = new ArrayList<>();
+                try {
+                    for (int i = 0; i < response.length(); i++) {
+                        JSONObject jsonObj = (JSONObject) response.get(i);
+
+                        if (Boolean.valueOf(jsonObj.getString("active"))) {
+                            allReomteCredentials.add(new CredentialSummaryDTO(jsonObj));
+                        }
+                    }
+                } catch(JSONException e) {
+                    Log.e("CredentialsApp", "MainActivity:getAllCredentialsFromAPI, " + e.toString());
+                }
+                new UpdateDBAsync().execute(allReomteCredentials.toArray(new CredentialSummaryDTO[0]));
+            }
+        };
+        Response.ErrorListener responseErrorListener = new Response.ErrorListener() {
             @Override
             public void onErrorResponse(VolleyError error) {
-                Log.e("CredentialsApp", "MainActivity, getCredentialsFromAPI: onErrorResponse(), " + error.getMessage());
+                Log.e("CredentialsApp", "MainActivity:getAllCredentialsFromAPI, " + error.getMessage());
             }
-        });
+        };
+        StringRequest stringRequest = new StringRequest(Request.Method.GET, url, responseListener, responseErrorListener);
         queue.add(stringRequest);
     }
 
-
-
     @Override
     public void onItemClick(View view, int position) {
-        if (dataAvailable) {
-            Intent intent = new Intent(MainActivity.this, CredentialActivity.class);
-            intent.putExtra("action", "viewCredential");
-            intent.putExtra("credential", credentialList.get(position).toJSON().toString());
-//            unregisterReceiver(this.connectivityChecker);
-            unregisterReceiver(broadcastReceiver);
-            startActivity(intent);
-        }
+        Intent intent = new Intent(MainActivity.this, CredentialActivity.class);
+        int credentialId = credentialsToBeDisplayed.get(position).getCredential_ID(); //
+        intent.putExtra("credential", String.valueOf(credentialId));
+        unregisterReceiver(connectivityMonitor);
+        unregisterReceiver(broadcastReceiver);
+        startActivity(intent);
     }
 
     @Override
     public void onBackPressed() {
-        Intent startMain = new Intent(Intent.ACTION_MAIN);
-        startMain.addCategory(Intent.CATEGORY_HOME);
-        startMain.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-        startActivity(startMain);
+        if (reducedList) {
+            credentialsToBeDisplayed.clear();
+            credentialsToBeDisplayed.addAll(allCredentials);
+            reducedList = false;
+            populateRecyclerView(credentialsToBeDisplayed);
+        } else {
+            Intent startMain = new Intent(Intent.ACTION_MAIN);
+            startMain.addCategory(Intent.CATEGORY_HOME);
+            startMain.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            startActivity(startMain);
+        }
     }
 
-    class UpdateDBAsync extends AsyncTask<CredentialDTO, Void, Integer> {
+    private List<CredentialSummaryDTO> searchCredentials(String searchString) {
+        List<CredentialSummaryDTO> searchResults = new ArrayList<>();
+
+        for (CredentialSummaryDTO credentialSummary : allCredentials) {
+            String serviceName = credentialSummary.getServiceName().toLowerCase();
+            String note = credentialSummary.getNote().toLowerCase();
+            if (serviceName.contains(searchString.toLowerCase()) | note.contains(searchString.toLowerCase())) {
+                searchResults.add(credentialSummary);
+            }
+        }
+        return searchResults;
+    }
+
+    private void populateRecyclerView(List<CredentialSummaryDTO> list) {
+        MyAdapter adapter = new MyAdapter(this, list);
+        adapter.setClickListener(this);
+        recyclerView.setAdapter(adapter);
+    }
+
+    private Snackbar initializeConnectivitySnackBar() {
+        Snackbar snackBar = Snackbar.make(findViewById(R.id.credentials_page), "Connection unavailable", Snackbar.LENGTH_INDEFINITE);
+        View snackBarView = snackBar.getView();
+        snackBarView.setBackgroundColor(ContextCompat.getColor(this, R.color.snackbarBackgroundColor));
+        TextView snackBarTextView = snackBarView.findViewById(android.support.design.R.id.snackbar_text);
+        if (Build.VERSION.SDK_INT >= 21) {
+            snackBarTextView.setTextAlignment(View.TEXT_ALIGNMENT_CENTER);
+        } else {
+            snackBarTextView.setGravity(Gravity.CENTER_HORIZONTAL);
+        }
+        return snackBar;
+    }
+
+    private boolean internetConnectionIsAvailable() {
+        ConnectivityManager connectivityManager = (ConnectivityManager) getSystemService(Context.CONNECTIVITY_SERVICE);
+        return connectivityManager.getNetworkInfo(ConnectivityManager.TYPE_MOBILE).getState() == NetworkInfo.State.CONNECTED
+            || connectivityManager.getNetworkInfo(ConnectivityManager.TYPE_WIFI).getState() == NetworkInfo.State.CONNECTED;
+    }
+
+    private void initializeConnectivityMonitor() {
+        connectivityMonitor = new CheckConnectivity();
+        this.registerReceiver(this.connectivityMonitor, new IntentFilter(ConnectivityManager.CONNECTIVITY_ACTION));
+        this.registerReceiver(broadcastReceiver, new IntentFilter("connection_change"));
+    }
+
+    BroadcastReceiver broadcastReceiver = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            String state = intent.getStringExtra("state");
+
+            if (state.equals("available") && connectivitySnackBarIsDisplayed) {
+                connectivitySnackBar.dismiss();
+                connectivitySnackBarIsDisplayed = false;
+                connectionAvailable = true;
+                getAllCredentialsFromAPI();
+
+            } else if (state.equals("unavailable") && !connectivitySnackBarIsDisplayed) {
+                connectivitySnackBar.show();
+                connectivitySnackBarIsDisplayed = true;
+                connectionAvailable = false;
+            }
+        }
+    };
+
+    private ArrayList<Integer> createIdListFromSparseArray(SparseArray<CredentialSummaryDTO> list) {
+        ArrayList<Integer> idList = new ArrayList<>();
+        for (int i = 0; i < list.size(); i++) {
+            idList.add(list.keyAt(i));
+        }
+        return idList;
+    }
+
+    private SparseArray<CredentialSummaryDTO> createSparseArrayFromArrayList(List<CredentialSummaryDTO> list) {
+        SparseArray<CredentialSummaryDTO> sa = new SparseArray<>();
+        for (CredentialSummaryDTO c : list) {
+            sa.put(c.getCredential_ID(), c);
+        }
+        return sa;
+    }
+
+    private List<Integer> getIntersectionOfAB(List<Integer> a, List<Integer> b) {
+        ArrayList<Integer> c = new ArrayList<>(a);
+        c.retainAll(b);
+        return c;
+    }
+
+    private List<Integer> getExclusiveToA(List<Integer> a, List<Integer> b) {
+        List<Integer> c = new ArrayList<>(a);
+        c.removeAll(b);
+        return c;
+    }
+
+    private void addAbsentCredentialsToLocalDb(List<Integer> indxList) {
+        for (Integer id : indxList) {
+            getRemoteCredAndAddToLocalDb(id);
+        }
+    }
+
+    private void addAbsentCredentialsToRemoteDb(List<Integer> indxList) {
+        for (Integer id : indxList) {
+            new GetLocalCredentialAsync().execute(id);
+        }
+    }
+
+    private void addCredentialToDisplayList(List<Integer> indxList, SparseArray<CredentialSummaryDTO> arr) {
+        for (int id :indxList) {
+            String newCredServiceName = arr.get(id).getServiceName().toLowerCase();
+            if (credentialsToBeDisplayed.size() == 0) {
+                credentialsToBeDisplayed.add(arr.get(id));
+            } else {
+                for (int i = 0; i < credentialsToBeDisplayed.size(); i++) {
+                    if (credentialsToBeDisplayed.get(i).getServiceName().toLowerCase().compareTo(newCredServiceName) > 0) {
+                        credentialsToBeDisplayed.add(i, arr.get(id));
+                        break;
+                    } else if (i == credentialsToBeDisplayed.size() -1) {
+                        credentialsToBeDisplayed.add(arr.get(id));
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
+    private void substituteCredentialInDisplayList(CredentialSummaryDTO cred) {
+        int id = cred.getCredential_ID();
+        for (int i = 0; i < credentialsToBeDisplayed.size(); i++) {
+            if (credentialsToBeDisplayed.get(i).getCredential_ID() == id) {
+                credentialsToBeDisplayed.set(i, cred);
+            }
+        }
+    }
+
+    private void syncIntersectingCredentials(List<Integer> indxList, SparseArray<CredentialSummaryDTO> localArr,
+                                             SparseArray<CredentialSummaryDTO> remoteArr) {
+        for (Integer id : indxList) {
+            long localDateModified = Long.valueOf(localArr.get(id).getDateLastModified());
+            long remoteDateModified = Long.valueOf(remoteArr.get(id).getDateLastModified());
+
+            if (localDateModified < remoteDateModified) {
+                getRemoteCredAndAddToLocalDb(id);
+                substituteCredentialInDisplayList(remoteArr.get(id));
+            } else if (localDateModified > remoteDateModified) {
+                new GetLocalCredentialAsync().execute(id);
+            }
+        }
+    }
+
+    private void setHighestCredential(List<CredentialSummaryDTO> creds) {
+        for(CredentialSummaryDTO cred : creds) {
+            Integer id = cred.getCredential_ID();
+            if (id > highestCredentialIndex) {
+                highestCredentialIndex = id;
+            }
+        }
+    }
+
+    class UpdateViewAsync extends AsyncTask<Void, Void, List<CredentialSummaryDTO>> {
+
+        @Override
+        protected void onPostExecute(List<CredentialSummaryDTO> result) {
+            if (result.size() > 0) {
+                allCredentials = result;
+                credentialsToBeDisplayed.clear();
+                credentialsToBeDisplayed.addAll(allCredentials);
+            } else {
+                Log.e("CredentialsApp", "MainActivity:UpdateViewAsync, No information available.");
+            }
+            populateRecyclerView(credentialsToBeDisplayed);
+        }
+
+        @Override
+        protected List<CredentialSummaryDTO> doInBackground(Void... params) {
+            return database.credentialDAO().getAllCredentialsSummary();
+        }
+    }
+
+    class UpdateDBAsync extends AsyncTask<CredentialSummaryDTO, Void, Integer> {
 
         @Override
         protected void onPostExecute(Integer result){
             if (result == 1) {
-                UpdateViewAsync updateViewAsync = new UpdateViewAsync();
-                updateViewAsync.execute();
+                new UpdateViewAsync().execute();
             }
         }
 
         @Override
-        protected Integer doInBackground(CredentialDTO... params) {
-            List<Credential> localCredentialObjs = database.credentialDAO().getAllCredentials();
-            List<Integer> remoteIds = new ArrayList<>();
-
-            for(CredentialDTO credentialDTO : params) {
-                Integer id = credentialDTO.Credential_ID;
-                if (id > highestCredentialIndex) {
-                    highestCredentialIndex = id;
-                }
-
-                remoteIds.add(id);
-                List<Credential> localCredentials = database.credentialDAO().getCredentialById(id);
-
-                if (localCredentials.isEmpty()) {
-                    updateLocalCredential(id); // add this credential to database
-                } else {
-                    Credential localCredential = localCredentials.get(0);
-
-                    long remoteDateModified = Long.valueOf(credentialDTO.DateLastModified);
-                    long localDateModified = Long.valueOf(localCredential.DateLastModified);
-
-                    if (remoteDateModified > localDateModified) {
-                        updateLocalCredential(id); // remote is newer
-                    } else if (localDateModified > remoteDateModified) {
-                        updateRemoteCredential(localCredential.toJSON()); // local is newer update remote
-                    }
-                }
+        protected Integer doInBackground(CredentialSummaryDTO... params) {
+            SparseArray<CredentialSummaryDTO> remoteArray = new SparseArray<>();
+            for (CredentialSummaryDTO c : params) {
+                remoteArray.put(c.getCredential_ID(), c);
             }
-            for(Credential localCredential : localCredentialObjs) {
-                Integer id = localCredential.Credential_ID;
-                if (id > highestCredentialIndex) {
-                    highestCredentialIndex = id;
-                }
+            SparseArray<CredentialSummaryDTO> localArray = createSparseArrayFromArrayList(
+                database.credentialDAO().getAllCredentialsSummary());
 
-                if (!remoteIds.contains(id)) {
-                    updateRemoteCredential(localCredential.toJSON());
-                }
-            }
-            return 1;
+            List<Integer> remoteIds = createIdListFromSparseArray(remoteArray);
+            List<Integer> localIds = createIdListFromSparseArray(localArray);
+
+            addAbsentCredentialsToLocalDb(getExclusiveToA(remoteIds, localIds));
+            addAbsentCredentialsToRemoteDb(getExclusiveToA(localIds, remoteIds));
+            addCredentialToDisplayList(getExclusiveToA(remoteIds, localIds), remoteArray);
+
+            syncIntersectingCredentials(getIntersectionOfAB(remoteIds, localIds), localArray, remoteArray);
+            setHighestCredential(database.credentialDAO().getAllCredentialsSummary());
+
+            return 1; // maybe return the synced credential list and the get the highest index
         }
     }
+    
+    private void postCredentialToAPI(Credential credential) {
+        String url = getResources().getString(R.string.api_url) + "/credentials/";
 
-
-    class UpdateViewAsync extends AsyncTask<Void, Void, List<Credential>> {
-
-        @Override
-        protected void onPostExecute(List<Credential> result) {
-            if (result.size() > 0) {
-                credentialList = result;
-                dataAvailable = true;
-            } else {
-                Log.e("CredentialsApp", "MainActivity, UpdateViewAsync, No information available.");
-                dataAvailable = false;
+        Response.Listener<JSONObject> responseListener = new Response.Listener<JSONObject>() {
+            @Override
+            public void onResponse(JSONObject response) {
+                Log.d("CredentialsApp", "Request sent" + response);
             }
-            populateRecyclerView(result);
-        }
-        @Override
-        protected List<Credential> doInBackground(Void... params) {
-            return database.credentialDAO().getAllCredentials();
-        }
+        };
+
+        Response.ErrorListener errorListener = new Response.ErrorListener() {
+            @Override
+            public void onErrorResponse(VolleyError error) {
+                Log.e("CredentialsApp", "EditCredentialActivity, updateCredentialInLocalDB: " + error.getMessage());
+            }
+        };
+
+        JsonObjectRequest request = new JsonObjectRequest(Request.Method.POST,
+            url, credential.toJSON(), responseListener, errorListener) {
+
+            @Override
+            protected Response<JSONObject> parseNetworkResponse(NetworkResponse response) {
+                int statusCode = response.statusCode;
+                Log.d("CredentialsApp", "Request status code: " + statusCode);
+                return super.parseNetworkResponse(response);
+            }
+        };
+        queue.add(request);
     }
 
-    // Refactor this into 2 methods getCredentialViaApi and updateCredentialInLocalDB
-    private void updateLocalCredential(Integer id) {
-        RequestQueue queue = Volley.newRequestQueue(this);
+    private void getRemoteCredAndAddToLocalDb(Integer id) {
         String url = getResources().getString(R.string.api_url) + "/credentials/" + id;
-        StringRequest stringRequest = new StringRequest(Request.Method.GET, url,
-            new Response.Listener<String>() {
-                @Override
-                public void onResponse(String response) {
-                    try {
-                        methodToHoldUntilResponseArrived(new JSONObject(response));
-                    } catch (java.lang.Throwable e) {
-                        Log.e("CredentialsApp", "MainActivity, updateLocalCredential, unexpected JSON exception", e);
-                    }
+
+        Response.Listener<String> responseListener = new Response.Listener<String>() {
+
+            @Override
+            public void onResponse(String response) {
+                try {
+                    JSONObject JSONobj = new JSONObject(response);
+                    methodToHoldUntilResponseArrived(new Credential(JSONobj));
+                } catch (java.lang.Throwable e) {
+                    Log.e("CredentialsApp", "MainActivity:updateLocalCredential, " + e.toString());
                 }
+            }
 
-                private void methodToHoldUntilResponseArrived(JSONObject obj){
-                    try {
-                        String serviceName = (obj.has("serviceName") ? obj.getString("serviceName") : "" );
-                        String serviceUrl = (obj.has("serviceUrl") ? obj.getString("serviceUrl") : "" );
-                        String username = (obj.has("username") ? obj.getString("username") : "" );
-                        String email = (obj.has("email") ? obj.getString("email") : "" );
-                        String password = (obj.has("password") ? obj.getString("password") : "" );
-                        String note = (obj.has("note") ? obj.getString("note") : "" );
+            private void methodToHoldUntilResponseArrived(Credential updatedCredential){
+                new SaveCredentialToLocalDBAsync().execute(updatedCredential);
+            }
+        };
 
-                        Credential updatedCredential = new Credential(
-                            Integer.valueOf(obj.getString("id")), serviceName, serviceUrl, username, email,
-                            password, obj.getString("dateLastModified"), note, obj.getBoolean("active"));
-
-                        database.credentialDAO().addCredential(updatedCredential);
-                    } catch(JSONException e) {
-                        Log.e("CredentialsApp", "MainActivity, getCredentialById, unexpected JSON exception", e);
-                    }
-                }
-            }, new Response.ErrorListener() {
+        Response.ErrorListener responseErrorListener = new Response.ErrorListener() {
             @Override
             public void onErrorResponse(VolleyError error) {
                 Log.e("CredentialsApp", "MainActivity, getCredentialById : onErrorResponse()");
             }
-        });
+        };
+
+        StringRequest stringRequest = new StringRequest(Request.Method.GET, url, responseListener, responseErrorListener) {
+
+            @Override
+            protected Response<String> parseNetworkResponse(NetworkResponse response) {
+                int statusCode = response.statusCode;
+                Log.d("CredentialsApp", "Request status code: " + statusCode);
+                return super.parseNetworkResponse(response);
+            }
+        };
         queue.add(stringRequest);
     }
 
-    private void updateRemoteCredential(JSONObject jsonObject) {
-        RequestQueue queue = Volley.newRequestQueue(this);
-        String url = getResources().getString(R.string.api_url) + "/credentials/";
-        Log.d("CredentialsApp", "jsonObject: " + jsonObject.toString());
+    class SaveCredentialToLocalDBAsync extends AsyncTask<Credential, Void, Integer> {
 
-        JsonObjectRequest request = new JsonObjectRequest(Request.Method.POST, url, jsonObject,
-            new Response.Listener<JSONObject>() {
-                @Override
-                public void onResponse(JSONObject response) {
-                    Log.d("CredentialsApp", "Credential on Remote has been updated");
-                }
-            }, new Response.ErrorListener() {
-            @Override
-            public void onErrorResponse(VolleyError error) {
-                Log.e("CredentialsApp", "MainActivity, updateRemoteCredential, Error message: " + error.getMessage());
-            }
-        });
-        queue.add(request);
+        @Override
+        protected Integer doInBackground(Credential... params) {
+            database.credentialDAO().addCredential(params[0]);
+            return 1;
+        }
     }
 
-    private void populateRecyclerView(List<Credential> list) {
-        MyAdapter adapter = new MyAdapter(this, list);
-        adapter.setClickListener(this);
-        recyclerView.setAdapter(adapter);
+    class GetLocalCredentialAsync extends AsyncTask<Integer, Void, List<Credential>> {
+
+        @Override
+        protected void onPostExecute(List<Credential> result) {
+            postCredentialToAPI(result.get(0));
+        }
+
+        @Override
+        protected List<Credential> doInBackground(Integer... params) {
+            return database.credentialDAO().getCredentialById(params[0]);
+        }
     }
 }

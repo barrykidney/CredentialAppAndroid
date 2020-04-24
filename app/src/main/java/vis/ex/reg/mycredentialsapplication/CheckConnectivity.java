@@ -6,7 +6,7 @@ import android.content.Intent;
 import android.net.ConnectivityManager;
 
 
-public class CheckConnectivity extends BroadcastReceiver{
+public class CheckConnectivity extends BroadcastReceiver {
 
     @Override
     public void onReceive(Context context, Intent arg1) {
@@ -16,7 +16,6 @@ public class CheckConnectivity extends BroadcastReceiver{
 
         if(notConnected) {
             context.sendBroadcast(new Intent("connection_change").putExtra("state", "unavailable"));
-
         } else {
             context.sendBroadcast(new Intent("connection_change").putExtra("state", "available"));
         }
