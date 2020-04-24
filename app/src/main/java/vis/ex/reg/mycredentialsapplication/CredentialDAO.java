@@ -15,14 +15,14 @@ public interface CredentialDAO {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     void addCredential(Credential credential);
 
-    @Query("SELECT * FROM Credential")
-    public List<Credential> getAllCredentials();
+    @Query("SELECT * FROM Credential ORDER BY ServiceName COLLATE NOCASE ASC")
+    List<Credential> getAllCredentials();
 
-    @Query("SELECT Credential_ID, DateLastModified, ServiceName, Note, Active FROM Credential")
-    public List<CredentialDTO> getAllCredentialsSummary();
+    @Query("SELECT Credential_ID, DateLastModified, ServiceName, Note, Active FROM Credential ORDER BY ServiceName COLLATE NOCASE ASC")
+    List<CredentialSummaryDTO> getAllCredentialsSummary();
 
     @Query("SELECT * FROM Credential WHERE Credential_ID = :credential_id")
-    public List<Credential> getCredentialById(int credential_id);
+    List<Credential> getCredentialById(int credential_id);
 
     @Update(onConflict = OnConflictStrategy.REPLACE)
     void updateCredential(Credential credential);

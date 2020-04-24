@@ -10,7 +10,7 @@
 
     <android.support.v7.widget.RecyclerView
         android:id="@+id/credentials_recycler_view"
-        android:layout_width="297dp"
+        android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:scrollbars="vertical"
         app:layout_constraintBottom_toBottomOf="parent"
