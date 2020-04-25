@@ -93,12 +93,12 @@ public class EditCredentialActivity extends AppCompatActivity {
 
             @Override
             public void onCheckedChanged(CompoundButton buttonView, boolean isChecked) {
-                if(isChecked){
-                    passwordEditText.setText(R.string.hidden_password_text);
-                    toggleButton.setBackgroundResource(R.drawable.visibility_on);
-                }else{
+                if (isChecked) {
                     passwordEditText.setText(decryptPassword(credential.getEncryptedPassword()));
                     toggleButton.setBackgroundResource(R.drawable.visibility_off);
+                } else {
+                    passwordEditText.setText(R.string.hidden_password_text);
+                    toggleButton.setBackgroundResource(R.drawable.visibility_on);
                 }
             }
         });
@@ -113,32 +113,32 @@ public class EditCredentialActivity extends AppCompatActivity {
     }
 
     private void saveCredential() {
-        Credential credential = new Credential();
+        Credential newCredential = new Credential();
+
         if (credentialID == -1) {
             credentialID = highestCredentialIndex + 1;
 //          credentialID = (highestCredentialIndex - (highestCredentialIndex % 10)) + 10 + Integer.valueOf(getResources().getString(R.string.device_number));
-            credential.setEncryptedPassword(encryptPassword(passwordEditText.getText().toString()));
+            newCredential.setEncryptedPassword(encryptPassword(passwordEditText.getText().toString()));
         } else {
-            if (passwordEditText.getText().toString().equals("****************")) {
-                credential.setEncryptedPassword(credential.getEncryptedPassword());
+            if (passwordEditText.getText().toString().equals(getResources().getString(R.string.hidden_password_text))) {
+                newCredential.setEncryptedPassword(credential.getEncryptedPassword());
             } else {
-                credential.setEncryptedPassword(encryptPassword(passwordEditText.getText().toString()));
+                newCredential.setEncryptedPassword(encryptPassword(passwordEditText.getText().toString()));
             }
         }
-        credential.setEncryptedPassword(encryptPassword(passwordEditText.getText().toString()));
-        credential.setCredential_ID(credentialID);
-        credential.setServiceUrl(serviceUrlEditText.getText().toString());
-        credential.setServiceName(serviceNameEditText.getText().toString());
-        credential.setUsername(usernameEditText.getText().toString());
-        credential.setEmail(emailEditText.getText().toString());
-        credential.setDateLastModified(String.valueOf(System.currentTimeMillis()));
-        credential.setNote(noteEditText.getText().toString());
-        credential.setActive(true);
+        newCredential.setCredential_ID(credentialID);
+        newCredential.setServiceUrl(serviceUrlEditText.getText().toString());
+        newCredential.setServiceName(serviceNameEditText.getText().toString());
+        newCredential.setUsername(usernameEditText.getText().toString());
+        newCredential.setEmail(emailEditText.getText().toString());
+        newCredential.setDateLastModified(String.valueOf(System.currentTimeMillis()));
+        newCredential.setNote(noteEditText.getText().toString());
+        newCredential.setActive(true);
 
         if (connectionAvailable) {
-            postCredentialToAPI(credential.toJSON());
+            postCredentialToAPI(newCredential.toJSON());
         }
-        database.credentialDAO().addCredential(credential);
+        database.credentialDAO().addCredential(newCredential);
         navigateToCredentialActivity();
     }
 
@@ -260,7 +260,7 @@ public class EditCredentialActivity extends AppCompatActivity {
                 connectivitySnackBarIsDisplayed = true;
                 connectionAvailable = false;
             }
-            Log.e("CredentialsApp", "connectionAvailable: " + connectionAvailable);
+            Log.d("CredentialsApp", "connectionAvailable: " + connectionAvailable);
         }
     };
 }

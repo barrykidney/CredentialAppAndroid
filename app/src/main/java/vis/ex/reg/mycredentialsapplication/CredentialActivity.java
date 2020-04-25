@@ -80,7 +80,6 @@ public class CredentialActivity extends AppCompatActivity {
 
         Intent intent = getIntent();
         credentialId = Integer.valueOf(intent.getStringExtra("credential"));
-
         UpdateViewAsync updateViewAsync = new UpdateViewAsync();
         updateViewAsync.execute(credentialId);
 
