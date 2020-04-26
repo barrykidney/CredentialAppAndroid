@@ -12,6 +12,7 @@ import android.support.design.widget.FloatingActionButton;
 import android.support.design.widget.Snackbar;
 import android.support.v4.content.ContextCompat;
 import android.support.v7.app.AppCompatActivity;
+import android.util.Base64;
 import android.util.Log;
 import android.view.Gravity;
 import android.view.View;
@@ -28,6 +29,9 @@ import com.android.volley.VolleyError;
 import com.android.volley.toolbox.JsonObjectRequest;
 import org.json.JSONObject;
 import java.io.IOException;
+import java.util.HashMap;
+import java.util.Map;
+
 import vis.ex.reg.mycredentialsapplication.encryption.DataEncryptionSystem;
 
 
@@ -53,6 +57,9 @@ public class EditCredentialActivity extends AppCompatActivity {
     private EditText noteEditText;
     private DataEncryptionSystem dataEncryptionSystem = new DataEncryptionSystem();
     private RequestQueue queue;
+
+    private String username = "user";
+    private String password = "password";
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -209,6 +216,15 @@ public class EditCredentialActivity extends AppCompatActivity {
         };
 
         JsonObjectRequest request = new JsonObjectRequest(Request.Method.POST, url, jsonObject, responseListener, errorListener) {
+
+            @Override
+            public Map<String, String> getHeaders() {
+                HashMap<String, String> headers = new HashMap<>();
+                String credentials = username + ":" + password;
+                String auth = "Basic " + Base64.encodeToString(credentials.getBytes(), Base64.NO_WRAP);
+                headers.put("Authorization", auth);
+                return headers;
+            }
 
             @Override
             protected Response<JSONObject> parseNetworkResponse(NetworkResponse response) {

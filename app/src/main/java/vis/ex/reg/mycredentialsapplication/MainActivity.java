@@ -10,6 +10,7 @@ import android.net.NetworkInfo;
 import android.os.AsyncTask;
 import android.os.Build;
 import android.os.Bundle;
+import android.provider.SyncStateContract;
 import android.support.design.widget.FloatingActionButton;
 import android.support.design.widget.Snackbar;
 import android.support.v4.content.ContextCompat;
@@ -17,6 +18,7 @@ import android.support.v7.app.AppCompatActivity;
 import android.support.v7.widget.LinearLayoutManager;
 import android.support.v7.widget.RecyclerView;
 import android.support.v7.widget.Toolbar;
+import android.util.Base64;
 import android.util.Log;
 import android.util.SparseArray;
 import android.view.Gravity;
@@ -26,6 +28,8 @@ import android.view.Menu;
 import android.view.MenuItem;
 import android.widget.SearchView;
 import android.widget.TextView;
+
+import com.android.volley.AuthFailureError;
 import com.android.volley.NetworkResponse;
 import com.android.volley.Request;
 import com.android.volley.RequestQueue;
@@ -37,7 +41,11 @@ import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+
+import static android.accounts.AccountManager.KEY_PASSWORD;
 
 
 public class MainActivity extends AppCompatActivity implements MyAdapter.ItemClickListener {
@@ -53,6 +61,9 @@ public class MainActivity extends AppCompatActivity implements MyAdapter.ItemCli
     private boolean reducedList = false;
     private boolean connectionAvailable;
     private RequestQueue queue;
+
+    private String username = "user";
+    private String password = "password";
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -173,7 +184,24 @@ public class MainActivity extends AppCompatActivity implements MyAdapter.ItemCli
                 Log.e("CredentialsApp", "MainActivity:getAllCredentialsFromAPI, " + error.getMessage());
             }
         };
-        StringRequest stringRequest = new StringRequest(Request.Method.GET, url, responseListener, responseErrorListener);
+        StringRequest stringRequest = new StringRequest(Request.Method.GET, url, responseListener, responseErrorListener) {
+
+            @Override
+            public Map<String, String> getHeaders() {
+                HashMap<String, String> headers = new HashMap<>();
+                String credentials = username + ":" + password;
+                String auth = "Basic " + Base64.encodeToString(credentials.getBytes(), Base64.NO_WRAP);
+                headers.put("Authorization", auth);
+                return headers;
+            }
+
+            @Override
+            protected Response<String> parseNetworkResponse(NetworkResponse response) {
+                int statusCode = response.statusCode;
+                Log.d("CredentialsApp", "Request status code: " + statusCode);
+                return super.parseNetworkResponse(response);
+            }
+        };
         queue.add(stringRequest);
     }
 
@@ -422,12 +450,21 @@ public class MainActivity extends AppCompatActivity implements MyAdapter.ItemCli
         Response.ErrorListener errorListener = new Response.ErrorListener() {
             @Override
             public void onErrorResponse(VolleyError error) {
-                Log.e("CredentialsApp", "EditCredentialActivity, updateCredentialInLocalDB: " + error.getMessage());
+                Log.e("CredentialsApp", "MainActivity, postCredentialToAPI: " + error.getMessage());
             }
         };
 
         JsonObjectRequest request = new JsonObjectRequest(Request.Method.POST,
             url, credential.toJSON(), responseListener, errorListener) {
+
+            @Override
+            public Map<String, String> getHeaders() {
+                HashMap<String, String> headers = new HashMap<>();
+                String credentials = username + ":" + password;
+                String auth = "Basic " + Base64.encodeToString(credentials.getBytes(), Base64.NO_WRAP);
+                headers.put("Authorization", auth);
+                return headers;
+            }
 
             @Override
             protected Response<JSONObject> parseNetworkResponse(NetworkResponse response) {
@@ -467,6 +504,15 @@ public class MainActivity extends AppCompatActivity implements MyAdapter.ItemCli
         };
 
         StringRequest stringRequest = new StringRequest(Request.Method.GET, url, responseListener, responseErrorListener) {
+
+            @Override
+            public Map<String, String> getHeaders() {
+                HashMap<String, String> headers = new HashMap<>();
+                String credentials = username + ":" + password;
+                String auth = "Basic " + Base64.encodeToString(credentials.getBytes(), Base64.NO_WRAP);
+                headers.put("Authorization", auth);
+                return headers;
+            }
 
             @Override
             protected Response<String> parseNetworkResponse(NetworkResponse response) {
