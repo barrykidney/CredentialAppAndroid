@@ -10,7 +10,6 @@ import android.net.NetworkInfo;
 import android.os.AsyncTask;
 import android.os.Build;
 import android.os.Bundle;
-import android.provider.SyncStateContract;
 import android.support.design.widget.FloatingActionButton;
 import android.support.design.widget.Snackbar;
 import android.support.v4.content.ContextCompat;
@@ -29,7 +28,6 @@ import android.view.MenuItem;
 import android.widget.SearchView;
 import android.widget.TextView;
 
-import com.android.volley.AuthFailureError;
 import com.android.volley.NetworkResponse;
 import com.android.volley.Request;
 import com.android.volley.RequestQueue;
@@ -44,8 +42,6 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-
-import static android.accounts.AccountManager.KEY_PASSWORD;
 
 
 public class MainActivity extends AppCompatActivity implements MyAdapter.ItemClickListener {
@@ -65,8 +61,10 @@ public class MainActivity extends AppCompatActivity implements MyAdapter.ItemCli
     private String username = "user";
     private String password = "password";
 
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
+
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
         Toolbar toolbar = findViewById(R.id.toolbar);
@@ -149,7 +147,8 @@ public class MainActivity extends AppCompatActivity implements MyAdapter.ItemCli
     }
 
     private void getAllCredentialsFromAPI() {
-        String url = getResources().getString(R.string.api_url) + "/credentials/";
+        int userId = 1;
+        String url = getResources().getString(R.string.api_url) + "/credentials/user/" + userId;
 
         Response.Listener<String> responseListener = new Response.Listener<String>() {
             @Override

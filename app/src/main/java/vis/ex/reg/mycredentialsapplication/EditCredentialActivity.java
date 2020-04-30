@@ -65,6 +65,9 @@ public class EditCredentialActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_edit_credential);
+        if (getSupportActionBar() != null) {
+            getSupportActionBar().setDisplayShowTitleEnabled(false);
+        }
 
         serviceNameEditText = findViewById(R.id.editServiceName);
         serviceUrlEditText = findViewById(R.id.editServiceUrl);
@@ -121,6 +124,7 @@ public class EditCredentialActivity extends AppCompatActivity {
 
     private void saveCredential() {
         Credential newCredential = new Credential();
+        int userId = 1;
 
         if (credentialID == -1) {
             credentialID = highestCredentialIndex + 1;
@@ -140,6 +144,7 @@ public class EditCredentialActivity extends AppCompatActivity {
         newCredential.setEmail(emailEditText.getText().toString());
         newCredential.setDateLastModified(String.valueOf(System.currentTimeMillis()));
         newCredential.setNote(noteEditText.getText().toString());
+        newCredential.setUserId(userId);
         newCredential.setActive(true);
 
         if (connectionAvailable) {

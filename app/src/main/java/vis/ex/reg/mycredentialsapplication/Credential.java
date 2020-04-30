@@ -20,6 +20,7 @@ class Credential implements Serializable {
     private String encryptedPassword;
     private String dateLastModified;
     private String note;
+    private int userId;
     private boolean active;
 
     Credential() {}
@@ -34,6 +35,7 @@ class Credential implements Serializable {
             this.setEncryptedPassword(jsonObj.getString("encryptedPassword"));
             this.setDateLastModified(jsonObj.getString("dateLastModified"));
             this.setNote(jsonObj.getString("note"));
+            this.setUserId(Integer.valueOf(jsonObj.getString("userId")));
             this.setActive(jsonObj.getBoolean("active"));
 
         } catch(JSONException e) {
@@ -73,6 +75,10 @@ class Credential implements Serializable {
         this.note = note;
     }
 
+    void setUserId(int userId) {
+        this.userId = userId;
+    }
+
     void setActive(boolean active) {
         this.active = active;
     }
@@ -109,6 +115,10 @@ class Credential implements Serializable {
         return note;
     }
 
+    int getUserId() {
+        return userId;
+    }
+
     boolean getActive() {
         return this.active;
     }
@@ -124,6 +134,7 @@ class Credential implements Serializable {
             jsonObject.put("encryptedPassword", this.getEncryptedPassword());
             jsonObject.put("dateLastModified", this.getDateLastModified());
             jsonObject.put("note", this.getNote());
+            jsonObject.put("userId", this.getUserId());
             jsonObject.put("active", this.getActive());
         } catch (JSONException e) {
             Log.e("CredentialsApp", e.getMessage());
