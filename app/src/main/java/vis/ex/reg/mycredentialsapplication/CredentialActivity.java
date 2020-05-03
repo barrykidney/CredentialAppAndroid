@@ -18,7 +18,9 @@ import android.util.Base64;
 import android.util.Log;
 import android.view.Gravity;
 import android.view.View;
+import android.widget.Button;
 import android.widget.CompoundButton;
+import android.widget.EditText;
 import android.widget.ImageView;
 import android.widget.TextView;
 import android.widget.ToggleButton;
@@ -31,6 +33,9 @@ import com.android.volley.VolleyError;
 import com.android.volley.toolbox.JsonObjectRequest;
 import org.json.JSONObject;
 import java.io.IOException;
+import java.io.UnsupportedEncodingException;
+import java.security.NoSuchAlgorithmException;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -40,11 +45,9 @@ import vis.ex.reg.mycredentialsapplication.encryption.DataEncryptionSystem;
 
 public class CredentialActivity extends AppCompatActivity {
 
-    private String key1 = "0123456789101112";
-    private String key2 = "abecedghijklmnop";
-    private String key3 = "zyxwvutsrqopnmlk";
     private AppDatabase database;
     private Credential credential;
+    private User user;
     private CheckConnectivity connectivityMonitor;
     private Snackbar connectivitySnackBar;
     private boolean connectionAvailable;
@@ -56,14 +59,18 @@ public class CredentialActivity extends AppCompatActivity {
     private TextView emailTextView;
     private TextView passwordTextView;
     private TextView noteTextView;
+    private EditText loginUsernameTextView;
+    private EditText loginPasswordTextView;
     private DataEncryptionSystem dataEncryptionSystem = new DataEncryptionSystem();
     private RequestQueue queue;
     private long authenticatedTime;
+    private ToggleButton toggleButton;
 
-    private String username = "user";
-    private String password = "password";
+    private String masterPassword = "";
     Dialog dialog;
-    ImageView imageView;
+    ImageView closeBtn;
+    Button authBtn;
+
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -92,29 +99,33 @@ public class CredentialActivity extends AppCompatActivity {
             connectivitySnackBarIsDisplayed = true;
         }
 
+        new SetUserAsync().execute();
+
         Intent intent = getIntent();
         credentialId = Integer.valueOf(intent.getStringExtra("credential"));
+        authenticatedTime = Long.valueOf(intent.getStringExtra("authenticatedTime"));
+        masterPassword = intent.getStringExtra("masterPassword");
         UpdateViewAsync updateViewAsync = new UpdateViewAsync();
         updateViewAsync.execute(credentialId);
 
 
-        final ToggleButton toggleButton = findViewById(R.id.encrypt_button);
+        toggleButton = findViewById(R.id.encrypt_button);
         toggleButton.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
 
             @Override
             public void onCheckedChanged(CompoundButton buttonView, boolean isChecked) {
 
-                login();
-
-                if(isChecked){
-                    // encrypt password
+                if (isChecked) {
+                    if (System.currentTimeMillis() - authenticatedTime < 30000) {
+                        List<String> keysList = generateKeys(masterPassword);
+                        passwordTextView.setText(decryptPassword(credential.getEncryptedPassword(), keysList));
+                        toggleButton.setBackgroundResource(R.drawable.visibility_off);
+                    } else {
+                        loginToViewPassword();
+                    }
+                } else {
                     passwordTextView.setText(R.string.hidden_password_text);
                     toggleButton.setBackgroundResource(R.drawable.visibility_on);
-
-                }else{
-                    // decrypt password
-                    passwordTextView.setText(decryptPassword(credential.getEncryptedPassword()));
-                    toggleButton.setBackgroundResource(R.drawable.visibility_off);
                 }
             }
         });
@@ -136,18 +147,99 @@ public class CredentialActivity extends AppCompatActivity {
         });
     }
 
-    private void login() {
+    private void loginToViewPassword() {
         final Dialog dialog = new Dialog(this);
         dialog.setContentView(R.layout.login);
 
-        imageView = dialog.findViewById(R.id.btnclose);
-        imageView.setOnClickListener(new View.OnClickListener() {
+        closeBtn = dialog.findViewById(R.id.btnclose);
+        closeBtn.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
                 dialog.dismiss();
             }
         });
+
+        authBtn = dialog.findViewById(R.id.authenticatebutton);
+        authBtn.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                loginUsernameTextView = dialog.findViewById(R.id.loginTextUsername);
+                loginPasswordTextView = dialog.findViewById(R.id.loginTextPassword);
+
+                try {
+                    String loginUsername = loginUsernameTextView.getText().toString();
+                    String loginHashedPassword = Sha1Encryption.SHA1(loginPasswordTextView.getText().toString());
+
+                    if (loginUsername.equals(user.getUsername()) && loginHashedPassword.equals(user.getMasterPassword())) {
+                        authenticatedTime = System.currentTimeMillis();
+                        masterPassword = Sha1Encryption.SHA1(loginPasswordTextView.getText().toString());
+                        List<String> keysList = generateKeys(masterPassword);
+                        passwordTextView.setText(decryptPassword(credential.getEncryptedPassword(), keysList));
+                        toggleButton.setBackgroundResource(R.drawable.visibility_off);
+                        dialog.dismiss();
+                    } else {
+                        authenticatedTime = 0L;
+                        masterPassword ="";
+                        dialog.dismiss();
+                    }
+                } catch (NoSuchAlgorithmException | UnsupportedEncodingException error) {
+                    Log.e("CredentialsApp", error.toString());
+                }
+            }
+        });
         dialog.show();
+    }
+
+    private void loginToDeleteCredential() {
+        final Dialog dialog = new Dialog(this);
+        dialog.setContentView(R.layout.login);
+
+        closeBtn = dialog.findViewById(R.id.btnclose);
+        closeBtn.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                dialog.dismiss();
+            }
+        });
+
+        authBtn = dialog.findViewById(R.id.authenticatebutton);
+        authBtn.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                loginUsernameTextView = dialog.findViewById(R.id.loginTextUsername);
+                loginPasswordTextView = dialog.findViewById(R.id.loginTextPassword);
+
+                try {
+                    String loginUsername = loginUsernameTextView.getText().toString();
+                    String loginHashedPassword = Sha1Encryption.SHA1(loginPasswordTextView.getText().toString());
+                    if (loginUsername.equals(user.getUsername()) && loginHashedPassword.equals(user.getMasterPassword())) {
+                        authenticatedTime = System.currentTimeMillis();
+                        masterPassword = Sha1Encryption.SHA1(loginPasswordTextView.getText().toString());
+                        dialog.dismiss();
+                        deleteCredential();
+                    } else {
+                        authenticatedTime = 0L;
+                        masterPassword = "";
+                        dialog.dismiss();
+                    }
+                } catch (NoSuchAlgorithmException | UnsupportedEncodingException error) {
+                    Log.e("CredentialsApp", error.toString());
+                }
+            }
+        });
+        dialog.show();
+    }
+
+    public List<String> generateKeys(String pwd) {
+        List<String> kList = new ArrayList<>();
+        try {
+            kList.add(Sha1Encryption.SHA1(pwd.substring(0,13)).substring(5,21));
+            kList.add(Sha1Encryption.SHA1(pwd.substring(13,26)).substring(21,37));
+            kList.add(Sha1Encryption.SHA1(pwd.substring(26,39)).substring(0,16));
+        } catch (NoSuchAlgorithmException | UnsupportedEncodingException error) {
+            Log.e("CredentialsApp", error.toString());
+        }
+        return kList;
     }
 
     private void populateCredentialView() {
@@ -159,10 +251,10 @@ public class CredentialActivity extends AppCompatActivity {
         noteTextView.setText(credential.getNote());
     }
 
-    private String decryptPassword(String clearText) {
+    private String decryptPassword(String clearText, List<String> keys) {
         String decryptedText = "";
         try {
-            decryptedText = dataEncryptionSystem.DecryptTripleDES(clearText, key1, key2, key3);
+            decryptedText = dataEncryptionSystem.DecryptTripleDES(clearText, keys.get(0), keys.get(1), keys.get(2));
         } catch (IOException e) {
             Log.e("DataEncryptionSystem", e.getMessage());
         }
@@ -172,6 +264,8 @@ public class CredentialActivity extends AppCompatActivity {
     @Override
     public void onBackPressed() {
         Intent intent = new Intent(CredentialActivity.this, MainActivity.class);
+        intent.putExtra("authenticatedTime", String.valueOf(authenticatedTime));
+        intent.putExtra("masterPassword", String.valueOf(masterPassword));
         unregisterReceiver(connectivityMonitor);
         unregisterReceiver(broadcastReceiver);
         startActivity(intent);
@@ -181,6 +275,8 @@ public class CredentialActivity extends AppCompatActivity {
     private void editCredential() {
         Intent intent = new Intent(CredentialActivity.this, EditCredentialActivity.class);
         intent.putExtra("action", "editCredential");
+        intent.putExtra("authenticatedTime", String.valueOf(authenticatedTime));
+        intent.putExtra("masterPassword", String.valueOf(masterPassword));
         intent.putExtra("credential", credential);
         unregisterReceiver(connectivityMonitor);
         unregisterReceiver(broadcastReceiver);
@@ -188,11 +284,30 @@ public class CredentialActivity extends AppCompatActivity {
     }
 
     private void deleteCredential() {
-        credential.setActive(false);
-        if (connectionAvailable) {
-            postCredentialToAPI(credential.toJSON());
+        Log.e("CredentialsApp", "deleteCredential");
+        if (System.currentTimeMillis() - authenticatedTime < 30000) {
+            Log.e("CredentialsApp", "Authenticated");
+            credential.setActive(false);
+            if (connectionAvailable) {
+                Log.e("CredentialsApp", "Deleting credential on remote");
+                postCredentialToAPI(credential.toJSON());
+            }
+            Log.e("CredentialsApp", "Deleting credential on local");
+            database.credentialDAO().addCredential(credential);
+            navigateToMainActivity();
+        } else {
+            Log.e("CredentialsApp", "Unauthenticated");
+            loginToDeleteCredential();
         }
-        database.credentialDAO().addCredential(credential);
+    }
+
+    private void navigateToMainActivity() {
+        Intent intent = new Intent(CredentialActivity.this, MainActivity.class);
+        intent.putExtra("authenticatedTime", String.valueOf(authenticatedTime));
+        intent.putExtra("masterPassword", String.valueOf(masterPassword));
+        unregisterReceiver(connectivityMonitor);
+        unregisterReceiver(broadcastReceiver);
+        startActivity(intent);
     }
 
     private Snackbar initializeConnectivitySnackBar() {
@@ -239,6 +354,22 @@ public class CredentialActivity extends AppCompatActivity {
         }
     };
 
+    class SetUserAsync extends AsyncTask<Void, Void, List<User>> {
+
+        @Override
+        protected void onPostExecute(List<User> result) {
+            if (result.size() == 1) {
+                user = result.get(0);
+            } else {
+                Log.e("CredentialsApp", "Users found in DB should be 1 but is: " + result.size());
+            }
+        }
+        @Override
+        protected List<User> doInBackground(Void... params) {
+            return database.userDAO().getAllUsers();
+        }
+    }
+
     class UpdateViewAsync extends AsyncTask<Integer, Void, List<Credential>> {
 
         @Override
@@ -279,7 +410,7 @@ public class CredentialActivity extends AppCompatActivity {
             @Override
             public Map<String, String> getHeaders() {
                 HashMap<String, String> headers = new HashMap<>();
-                String credentials = username + ":" + password;
+                String credentials = user.getUsername() + ":" + user.getMasterPassword();
                 String auth = "Basic " + Base64.encodeToString(credentials.getBytes(), Base64.NO_WRAP);
                 headers.put("Authorization", auth);
                 return headers;

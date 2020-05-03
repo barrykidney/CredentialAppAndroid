@@ -72,10 +72,10 @@ public class ProfileActivity extends AppCompatActivity {
 
         try {
             Log.e("CredentialsApp", "This is saoirses password");
-            Log.e("CredentialsApp", Sha1Encryption.SHA1("This is a saoirses password"));
+            Log.e("CredentialsApp", Sha1Encryption.SHA1("This is saoirses password"));
 
             Log.e("CredentialsApp", "This is julies password");
-            Log.e("CredentialsApp", Sha1Encryption.SHA1("This is a julies password"));
+            Log.e("CredentialsApp", Sha1Encryption.SHA1("This is julies password"));
         } catch (NoSuchAlgorithmException | UnsupportedEncodingException error) {
             Log.e("CredentialsApp", error.toString());
         }

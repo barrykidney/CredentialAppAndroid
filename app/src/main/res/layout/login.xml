@@ -30,7 +30,7 @@
         android:layout_below="@+id/logo"
         android:layout_centerHorizontal="true"
         android:layout_marginTop="40dp"
-        android:id="@+id/textusername"
+        android:id="@+id/loginTextUsername"
         android:hint="username"
         android:background="#bdc3c7"
         />
@@ -38,8 +38,8 @@
     <EditText
         android:layout_width="300dp"
         android:layout_height="wrap_content"
-        android:id="@+id/textpassword"
-        android:layout_below="@+id/textusername"
+        android:id="@+id/loginTextPassword"
+        android:layout_below="@+id/loginTextUsername"
         android:layout_centerHorizontal="true"
         android:layout_marginTop="40dp"
         android:hint="password"
@@ -51,7 +51,7 @@
         android:layout_height="40dp"
         android:layout_centerHorizontal="true"
         android:layout_marginTop="30dp"
-        android:layout_below="@+id/textpassword"
+        android:layout_below="@+id/loginTextPassword"
         android:clickable="true"
         android:id="@+id/authenticatebutton"
         android:text="authenticate"

@@ -50,6 +50,7 @@ public class MainActivity extends AppCompatActivity implements MyAdapter.ItemCli
     private List<CredentialSummaryDTO> credentialsToBeDisplayed = new ArrayList<>();
     private CheckConnectivity connectivityMonitor;
     private AppDatabase database;
+    private User user;
     private RecyclerView recyclerView;
     private Snackbar connectivitySnackBar;
     private int highestCredentialIndex = 0;
@@ -60,8 +61,7 @@ public class MainActivity extends AppCompatActivity implements MyAdapter.ItemCli
     private long authenticatedTime;
 
     private int userId = 1;
-    private String username = "user";
-    private String password = "password";
+    private String masterPassword = "";
 
 
     @Override
@@ -88,10 +88,18 @@ public class MainActivity extends AppCompatActivity implements MyAdapter.ItemCli
         if (connectionAvailable) {
             Log.e("CredentialsApp", "conn avail");
             synchronizeUserProfile();
-//            getAllCredentialsFromAPI();
         } else {
             UpdateViewAsync updateViewAsync = new UpdateViewAsync();
             updateViewAsync.execute();
+        }
+
+        new SetUserAsync().execute();
+
+        authenticatedTime = 0L;
+        Intent intent = getIntent();
+        if (intent.hasExtra("authenticatedTime")) {
+            authenticatedTime = Long.valueOf(intent.getStringExtra("authenticatedTime"));
+            masterPassword = intent.getStringExtra("masterPassword");
         }
 
         FloatingActionButton addCredentialButton = findViewById(R.id.addCredential);
@@ -100,6 +108,12 @@ public class MainActivity extends AppCompatActivity implements MyAdapter.ItemCli
             public void onClick(View view) {
                 Intent intent = new Intent(MainActivity.this, EditCredentialActivity.class);
                 intent.putExtra("action", "addCredential");
+                if (authenticatedTime == 0 || (System.currentTimeMillis() - authenticatedTime) > 30000) {
+                    authenticatedTime = 0L;
+                    masterPassword = "";
+                }
+                intent.putExtra("authenticatedTime", String.valueOf(authenticatedTime));
+                intent.putExtra("masterPassword", String.valueOf(masterPassword));
                 intent.putExtra("highestCredentialIndex", String.valueOf(highestCredentialIndex));
                 unregisterReceiver(connectivityMonitor);
                 unregisterReceiver(broadcastReceiver);
@@ -154,7 +168,14 @@ public class MainActivity extends AppCompatActivity implements MyAdapter.ItemCli
 
     private void navigateToProfileUserActivity() {
         Intent intent = new Intent(MainActivity.this, ProfileActivity.class);
-        intent.putExtra("user", "1");
+        // TODO: fix this
+//        intent.putExtra("user", String.valueOf(user.getUser_ID()));
+        if (authenticatedTime == 0 || (System.currentTimeMillis() - authenticatedTime) > 30000) {
+            authenticatedTime = 0L;
+            masterPassword = "";
+        }
+        intent.putExtra("authenticatedTime", String.valueOf(authenticatedTime));
+        intent.putExtra("masterPassword", String.valueOf(masterPassword));
         unregisterReceiver(connectivityMonitor);
         unregisterReceiver(broadcastReceiver);
         startActivity(intent);
@@ -193,7 +214,7 @@ public class MainActivity extends AppCompatActivity implements MyAdapter.ItemCli
             @Override
             public Map<String, String> getHeaders() {
                 HashMap<String, String> headers = new HashMap<>();
-                String credentials = username + ":" + password;
+                String credentials = user.getUsername() + ":" + user.getMasterPassword();
                 String auth = "Basic " + Base64.encodeToString(credentials.getBytes(), Base64.NO_WRAP);
                 headers.put("Authorization", auth);
                 return headers;
@@ -207,15 +228,7 @@ public class MainActivity extends AppCompatActivity implements MyAdapter.ItemCli
             }
         };
         queue.add(stringRequest);
-
-
-
-//        synchronizeUserProfile();
     }
-
-//    private void synchronizeUserProfile() {
-//        Log.e("CredentialsApp", "synchronizeProfile");
-//    }
 
     private void getAllCredentialsFromAPI() {
         String url = getResources().getString(R.string.api_url) + "/credentials/user/" + userId;
@@ -236,10 +249,7 @@ public class MainActivity extends AppCompatActivity implements MyAdapter.ItemCli
                 try {
                     for (int i = 0; i < response.length(); i++) {
                         JSONObject jsonObj = (JSONObject) response.get(i);
-
-                        if (Boolean.valueOf(jsonObj.getString("active"))) {
-                            allReomteCredentials.add(new CredentialSummaryDTO(jsonObj));
-                        }
+                        allReomteCredentials.add(new CredentialSummaryDTO(jsonObj));
                     }
                 } catch(JSONException e) {
                     Log.e("CredentialsApp", "MainActivity:getAllCredentialsFromAPI, " + e.toString());
@@ -258,7 +268,7 @@ public class MainActivity extends AppCompatActivity implements MyAdapter.ItemCli
             @Override
             public Map<String, String> getHeaders() {
                 HashMap<String, String> headers = new HashMap<>();
-                String credentials = username + ":" + password;
+                String credentials = user.getUsername() + ":" + user.getMasterPassword();
                 String auth = "Basic " + Base64.encodeToString(credentials.getBytes(), Base64.NO_WRAP);
                 headers.put("Authorization", auth);
                 return headers;
@@ -279,6 +289,12 @@ public class MainActivity extends AppCompatActivity implements MyAdapter.ItemCli
         Intent intent = new Intent(MainActivity.this, CredentialActivity.class);
         int credentialId = credentialsToBeDisplayed.get(position).getCredential_ID(); //
         intent.putExtra("credential", String.valueOf(credentialId));
+        if (authenticatedTime == 0 || (System.currentTimeMillis() - authenticatedTime) > 30000) {
+            authenticatedTime = 0L;
+            masterPassword = "";
+        }
+        intent.putExtra("authenticatedTime", String.valueOf(authenticatedTime));
+        intent.putExtra("masterPassword", String.valueOf(masterPassword));
         unregisterReceiver(connectivityMonitor);
         unregisterReceiver(broadcastReceiver);
         startActivity(intent);
@@ -461,7 +477,12 @@ public class MainActivity extends AppCompatActivity implements MyAdapter.ItemCli
             if (result.size() > 0) {
                 allCredentials = result;
                 credentialsToBeDisplayed.clear();
-                credentialsToBeDisplayed.addAll(allCredentials);
+                for (CredentialSummaryDTO cred : allCredentials) {
+                    if (cred.getActive()) {
+                        credentialsToBeDisplayed.add(cred);
+                    }
+                }
+//                credentialsToBeDisplayed.addAll(allCredentials);
             } else {
                 Log.e("CredentialsApp", "MainActivity:UpdateViewAsync, No information available.");
             }
@@ -529,7 +550,7 @@ public class MainActivity extends AppCompatActivity implements MyAdapter.ItemCli
             @Override
             public Map<String, String> getHeaders() {
                 HashMap<String, String> headers = new HashMap<>();
-                String credentials = username + ":" + password;
+                String credentials = user.getUsername() + ":" + user.getMasterPassword();
                 String auth = "Basic " + Base64.encodeToString(credentials.getBytes(), Base64.NO_WRAP);
                 headers.put("Authorization", auth);
                 return headers;
@@ -577,7 +598,7 @@ public class MainActivity extends AppCompatActivity implements MyAdapter.ItemCli
             @Override
             public Map<String, String> getHeaders() {
                 HashMap<String, String> headers = new HashMap<>();
-                String credentials = username + ":" + password;
+                String credentials = user.getUsername() + ":" + user.getMasterPassword();
                 String auth = "Basic " + Base64.encodeToString(credentials.getBytes(), Base64.NO_WRAP);
                 headers.put("Authorization", auth);
                 return headers;
@@ -653,7 +674,7 @@ public class MainActivity extends AppCompatActivity implements MyAdapter.ItemCli
         }
     }
 
-    private void postUserToAPI(User user) {
+    private void postUserToAPI(User localUser) {
         String url = getResources().getString(R.string.api_url) + "/user/";
 
         Response.Listener<JSONObject> responseListener = new Response.Listener<JSONObject>() {
@@ -671,12 +692,13 @@ public class MainActivity extends AppCompatActivity implements MyAdapter.ItemCli
         };
 
         JsonObjectRequest request = new JsonObjectRequest(Request.Method.POST,
-            url, user.toJSON(), responseListener, errorListener) {
+            url, localUser.toJSON(), responseListener, errorListener) {
 
             @Override
             public Map<String, String> getHeaders() {
                 HashMap<String, String> headers = new HashMap<>();
-                String credentials = username + ":" + password;
+                // TODO: potential bug here posting updated user using old user credentials
+                String credentials = user.getUsername() + ":" + user.getMasterPassword();
                 String auth = "Basic " + Base64.encodeToString(credentials.getBytes(), Base64.NO_WRAP);
                 headers.put("Authorization", auth);
                 return headers;
@@ -690,6 +712,22 @@ public class MainActivity extends AppCompatActivity implements MyAdapter.ItemCli
             }
         };
         queue.add(request);
+    }
+
+    class SetUserAsync extends AsyncTask<Void, Void, List<User>> {
+
+        @Override
+        protected void onPostExecute(List<User> result) {
+            if (result.size() == 1) {
+                user = result.get(0);
+            } else {
+                Log.e("CredentialsApp", "Users found in DB should be 1 but is: " + result.size());
+            }
+        }
+        @Override
+        protected List<User> doInBackground(Void... params) {
+            return database.userDAO().getAllUsers();
+        }
     }
 
     class SaveUserToLocalDBAsync extends AsyncTask<User, Void, Integer> {
