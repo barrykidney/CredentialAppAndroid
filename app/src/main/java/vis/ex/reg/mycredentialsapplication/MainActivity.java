@@ -57,7 +57,9 @@ public class MainActivity extends AppCompatActivity implements MyAdapter.ItemCli
     private boolean reducedList = false;
     private boolean connectionAvailable;
     private RequestQueue queue;
+    private long authenticatedTime;
 
+    private int userId = 1;
     private String username = "user";
     private String password = "password";
 
@@ -85,7 +87,8 @@ public class MainActivity extends AppCompatActivity implements MyAdapter.ItemCli
 
         if (connectionAvailable) {
             Log.e("CredentialsApp", "conn avail");
-            getAllCredentialsFromAPI(); // sync dbs and update view
+            synchronizeUserProfile();
+//            getAllCredentialsFromAPI();
         } else {
             UpdateViewAsync updateViewAsync = new UpdateViewAsync();
             updateViewAsync.execute();
@@ -135,19 +138,86 @@ public class MainActivity extends AppCompatActivity implements MyAdapter.ItemCli
 
     @Override
     public boolean onOptionsItemSelected(MenuItem item) {
-        // Handle action bar item clicks here. The action bar will
-        // automatically handle clicks on the Home/Up button, so long
-        // as you specify a parent activity in AndroidManifest.xml.
-        int id = item.getItemId();
-        //noinspection SimplifiableIfStatement
-        if (id == R.id.action_settings) {
-            return true;
+        switch (item.getItemId()) {
+            case R.id.action_settings:
+                Log.e("CredentialsApp", "Settings selected");
+//                navigateToSettingsUserActivity();
+                return true;
+            case R.id.action_profile:
+                Log.e("CredentialsApp", "Profile selected");
+                navigateToProfileUserActivity();
+                return true;
+            default:
+                return super.onOptionsItemSelected(item);
         }
-        return super.onOptionsItemSelected(item);
     }
 
+    private void navigateToProfileUserActivity() {
+        Intent intent = new Intent(MainActivity.this, ProfileActivity.class);
+        intent.putExtra("user", "1");
+        unregisterReceiver(connectivityMonitor);
+        unregisterReceiver(broadcastReceiver);
+        startActivity(intent);
+    }
+
+    private void synchronizeUserProfile() {
+        Log.e("CredentialsApp", "synchronizeWithRemote");
+        String url = getResources().getString(R.string.api_url) + "/user/" + userId;
+
+        Response.Listener<String> responseListener = new Response.Listener<String>() {
+
+            @Override
+            public void onResponse(String response) {
+                try {
+                    JSONObject JSONobj = new JSONObject(response);
+                    methodToHoldUntilResponseArrived(new User(JSONobj));
+                } catch (java.lang.Throwable e) {
+                    Log.e("CredentialsApp", "MainActivity:updateLocalCredential, " + e.toString());
+                }
+            }
+
+            private void methodToHoldUntilResponseArrived(User user){
+                new UpdateUserDBAsync().execute(user);
+            }
+        };
+
+        Response.ErrorListener responseErrorListener = new Response.ErrorListener() {
+            @Override
+            public void onErrorResponse(VolleyError error) {
+                Log.e("CredentialsApp", "MainActivity, getCredentialById : onErrorResponse()");
+            }
+        };
+
+        StringRequest stringRequest = new StringRequest(Request.Method.GET, url, responseListener, responseErrorListener) {
+
+            @Override
+            public Map<String, String> getHeaders() {
+                HashMap<String, String> headers = new HashMap<>();
+                String credentials = username + ":" + password;
+                String auth = "Basic " + Base64.encodeToString(credentials.getBytes(), Base64.NO_WRAP);
+                headers.put("Authorization", auth);
+                return headers;
+            }
+
+            @Override
+            protected Response<String> parseNetworkResponse(NetworkResponse response) {
+                int statusCode = response.statusCode;
+                Log.d("CredentialsApp", "Request status code: " + statusCode);
+                return super.parseNetworkResponse(response);
+            }
+        };
+        queue.add(stringRequest);
+
+
+
+//        synchronizeUserProfile();
+    }
+
+//    private void synchronizeUserProfile() {
+//        Log.e("CredentialsApp", "synchronizeProfile");
+//    }
+
     private void getAllCredentialsFromAPI() {
-        int userId = 1;
         String url = getResources().getString(R.string.api_url) + "/credentials/user/" + userId;
 
         Response.Listener<String> responseListener = new Response.Listener<String>() {
@@ -498,7 +568,7 @@ public class MainActivity extends AppCompatActivity implements MyAdapter.ItemCli
         Response.ErrorListener responseErrorListener = new Response.ErrorListener() {
             @Override
             public void onErrorResponse(VolleyError error) {
-                Log.e("CredentialsApp", "MainActivity, getCredentialById : onErrorResponse()");
+                Log.e("CredentialsApp", error.toString());
             }
         };
 
@@ -542,6 +612,92 @@ public class MainActivity extends AppCompatActivity implements MyAdapter.ItemCli
         @Override
         protected List<Credential> doInBackground(Integer... params) {
             return database.credentialDAO().getCredentialById(params[0]);
+        }
+    }
+
+    class UpdateUserDBAsync extends AsyncTask<User, Void, Integer> {
+
+        @Override
+        protected void onPostExecute(Integer result){
+            if (result == 1) {
+                getAllCredentialsFromAPI();
+            }
+        }
+
+        @Override
+        protected Integer doInBackground(User... params) {
+            User userFromRemoteDb = params[0];
+            User userFromLocalDb;
+
+            List<User> localUserList = database.userDAO().getAllUsers();
+            if (localUserList.size() >= 1) {
+                userFromLocalDb = localUserList.get(0);
+
+                long localDateModified = Long.valueOf(userFromLocalDb.getDateLastModified());
+                long remoteDateModified = Long.valueOf(userFromRemoteDb.getDateLastModified());
+
+                if (localDateModified < remoteDateModified) {
+                    userId = userFromRemoteDb.getUser_ID();
+                    new SaveUserToLocalDBAsync().execute(userFromRemoteDb);
+                } else if (localDateModified > remoteDateModified) {
+                    userId = userFromLocalDb.getUser_ID();
+                    postUserToAPI(userFromLocalDb);
+                }
+
+            } else {
+                Log.i("CredentialsApp", "No user details found in local database");
+                userId = userFromRemoteDb.getUser_ID();
+                new SaveUserToLocalDBAsync().execute(userFromRemoteDb);
+            }
+            return 1; // maybe return the synced credential list and the get the highest index
+        }
+    }
+
+    private void postUserToAPI(User user) {
+        String url = getResources().getString(R.string.api_url) + "/user/";
+
+        Response.Listener<JSONObject> responseListener = new Response.Listener<JSONObject>() {
+            @Override
+            public void onResponse(JSONObject response) {
+                Log.d("CredentialsApp", "Request sent" + response);
+            }
+        };
+
+        Response.ErrorListener errorListener = new Response.ErrorListener() {
+            @Override
+            public void onErrorResponse(VolleyError error) {
+                Log.e("CredentialsApp", "MainActivity, postCredentialToAPI: " + error.getMessage());
+            }
+        };
+
+        JsonObjectRequest request = new JsonObjectRequest(Request.Method.POST,
+            url, user.toJSON(), responseListener, errorListener) {
+
+            @Override
+            public Map<String, String> getHeaders() {
+                HashMap<String, String> headers = new HashMap<>();
+                String credentials = username + ":" + password;
+                String auth = "Basic " + Base64.encodeToString(credentials.getBytes(), Base64.NO_WRAP);
+                headers.put("Authorization", auth);
+                return headers;
+            }
+
+            @Override
+            protected Response<JSONObject> parseNetworkResponse(NetworkResponse response) {
+                int statusCode = response.statusCode;
+                Log.d("CredentialsApp", "Request status code: " + statusCode);
+                return super.parseNetworkResponse(response);
+            }
+        };
+        queue.add(request);
+    }
+
+    class SaveUserToLocalDBAsync extends AsyncTask<User, Void, Integer> {
+
+        @Override
+        protected Integer doInBackground(User... params) {
+            database.userDAO().addUser(params[0]);
+            return 1;
         }
     }
 }

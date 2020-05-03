@@ -1,5 +1,6 @@
 package vis.ex.reg.mycredentialsapplication;
 
+import android.app.Dialog;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
@@ -18,6 +19,7 @@ import android.util.Log;
 import android.view.Gravity;
 import android.view.View;
 import android.widget.CompoundButton;
+import android.widget.ImageView;
 import android.widget.TextView;
 import android.widget.ToggleButton;
 
@@ -56,9 +58,12 @@ public class CredentialActivity extends AppCompatActivity {
     private TextView noteTextView;
     private DataEncryptionSystem dataEncryptionSystem = new DataEncryptionSystem();
     private RequestQueue queue;
+    private long authenticatedTime;
 
     private String username = "user";
     private String password = "password";
+    Dialog dialog;
+    ImageView imageView;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -92,11 +97,15 @@ public class CredentialActivity extends AppCompatActivity {
         UpdateViewAsync updateViewAsync = new UpdateViewAsync();
         updateViewAsync.execute(credentialId);
 
+
         final ToggleButton toggleButton = findViewById(R.id.encrypt_button);
         toggleButton.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
 
             @Override
             public void onCheckedChanged(CompoundButton buttonView, boolean isChecked) {
+
+                login();
+
                 if(isChecked){
                     // encrypt password
                     passwordTextView.setText(R.string.hidden_password_text);
@@ -125,6 +134,20 @@ public class CredentialActivity extends AppCompatActivity {
                 deleteCredential();
             }
         });
+    }
+
+    private void login() {
+        final Dialog dialog = new Dialog(this);
+        dialog.setContentView(R.layout.login);
+
+        imageView = dialog.findViewById(R.id.btnclose);
+        imageView.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                dialog.dismiss();
+            }
+        });
+        dialog.show();
     }
 
     private void populateCredentialView() {

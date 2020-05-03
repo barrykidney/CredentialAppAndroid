@@ -5,11 +5,11 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     app:layout_behavior="@string/appbar_scrolling_view_behavior"
-    tools:context=".userActivity"
-    tools:showIn="@layout/activity_user">
+    tools:context=".ProfileActivity"
+    tools:showIn="@layout/activity_profile">
 
     <TextView
-        android:id="@+id/username"
+        android:id="@+id/profile_username"
         android:layout_width="0dp"
         android:layout_height="45dp"
         android:layout_marginStart="16dp"
@@ -21,7 +21,7 @@
         app:layout_constraintTop_toTopOf="parent" />
 
     <TextView
-        android:id="@+id/email"
+        android:id="@+id/profile_email"
         android:layout_width="0dp"
         android:layout_height="35dp"
         android:layout_marginStart="16dp"
@@ -30,10 +30,10 @@
         android:text="@string/serviceUrl_default"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@+id/username" />
+        app:layout_constraintTop_toBottomOf="@+id/profile_username" />
 
     <TextView
-        android:id="@+id/password"
+        android:id="@+id/profile_password"
         android:layout_width="0dp"
         android:layout_height="35dp"
         android:layout_marginStart="16dp"
@@ -42,7 +42,7 @@
         android:text="@string/username_default"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@+id/email" />
+        app:layout_constraintTop_toBottomOf="@+id/profile_email" />
 
     <ToggleButton
         android:id="@+id/encrypt_button"
@@ -57,7 +57,7 @@
         android:textOff="@string/encrypt_button"
         android:textOn="@string/encrypt_button"
         app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toEndOf="@+id/password"
-        app:layout_constraintTop_toBottomOf="@+id/email" />
+        app:layout_constraintStart_toEndOf="@+id/profile_password"
+        app:layout_constraintTop_toBottomOf="@+id/profile_email" />
 
 </android.support.constraint.ConstraintLayout>

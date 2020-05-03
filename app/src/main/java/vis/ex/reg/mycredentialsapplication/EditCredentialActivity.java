@@ -57,6 +57,7 @@ public class EditCredentialActivity extends AppCompatActivity {
     private EditText noteEditText;
     private DataEncryptionSystem dataEncryptionSystem = new DataEncryptionSystem();
     private RequestQueue queue;
+    private boolean authenticatedTime;
 
     private String username = "user";
     private String password = "password";

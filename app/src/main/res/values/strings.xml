@@ -1,6 +1,7 @@
 <resources>
     <string name="app_name">MyCredentialsApplication</string>
     <string name="action_settings">Settings</string>
+    <string name="action_profile">Profile</string>
     <string name="api_url">http://34.253.6.76:8080</string>
     <string name="not_avail">Information currently unavailable</string>
     <string name="device_number">1</string>

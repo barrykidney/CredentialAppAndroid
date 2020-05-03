@@ -6,11 +6,12 @@ import android.arch.persistence.room.RoomDatabase;
 import android.content.Context;
 
 
-@Database(entities = {Credential.class}, version = 16, exportSchema = false)
+@Database(entities = {Credential.class, User.class}, version = 16, exportSchema = false)
 public abstract class AppDatabase extends RoomDatabase {
 
     private static AppDatabase INSTANCE;
     public abstract CredentialDAO credentialDAO();
+    public abstract UserDAO userDAO();
 
     static AppDatabase getDatabase(Context context) {
         if (INSTANCE == null) {
