@@ -60,7 +60,7 @@ public class MainActivity extends AppCompatActivity implements MyAdapter.ItemCli
     private RequestQueue queue;
     private long authenticatedTime;
 
-    private int userId = 1;
+//    private int userId = 1;
     private String masterPassword = "";
 
 
@@ -85,19 +85,17 @@ public class MainActivity extends AppCompatActivity implements MyAdapter.ItemCli
         initializeConnectivityMonitor();
         connectionAvailable = internetConnectionIsAvailable();
 
-        if (connectionAvailable) {
-            Log.e("CredentialsApp", "conn avail");
-            synchronizeUserProfile();
-        } else {
-            UpdateViewAsync updateViewAsync = new UpdateViewAsync();
-            updateViewAsync.execute();
-        }
-
         new SetUserAsync().execute();
+
+        if (connectionAvailable) {
+            new SyncUserAsync().execute();
+        } else {
+            new UpdateViewAsync().execute();
+        }
 
         authenticatedTime = 0L;
         Intent intent = getIntent();
-        if (intent.hasExtra("authenticatedTime")) {
+        if (intent.hasExtra("authenticatedTime") && intent.hasExtra("masterPassword")) {
             authenticatedTime = Long.valueOf(intent.getStringExtra("authenticatedTime"));
             masterPassword = intent.getStringExtra("masterPassword");
         }
@@ -183,7 +181,7 @@ public class MainActivity extends AppCompatActivity implements MyAdapter.ItemCli
 
     private void synchronizeUserProfile() {
         Log.e("CredentialsApp", "synchronizeWithRemote");
-        String url = getResources().getString(R.string.api_url) + "/user/" + userId;
+        String url = getResources().getString(R.string.api_url) + "/user/" + user.getUser_ID();
 
         Response.Listener<String> responseListener = new Response.Listener<String>() {
 
@@ -197,8 +195,8 @@ public class MainActivity extends AppCompatActivity implements MyAdapter.ItemCli
                 }
             }
 
-            private void methodToHoldUntilResponseArrived(User user){
-                new UpdateUserDBAsync().execute(user);
+            private void methodToHoldUntilResponseArrived(User userFromRemote){
+                new UpdateUserDBAsync().execute(userFromRemote);
             }
         };
 
@@ -231,7 +229,7 @@ public class MainActivity extends AppCompatActivity implements MyAdapter.ItemCli
     }
 
     private void getAllCredentialsFromAPI() {
-        String url = getResources().getString(R.string.api_url) + "/credentials/user/" + userId;
+        String url = getResources().getString(R.string.api_url) + "/credentials/user/" + user.getUser_ID();
 
         Response.Listener<String> responseListener = new Response.Listener<String>() {
             @Override
@@ -658,19 +656,19 @@ public class MainActivity extends AppCompatActivity implements MyAdapter.ItemCli
                 long remoteDateModified = Long.valueOf(userFromRemoteDb.getDateLastModified());
 
                 if (localDateModified < remoteDateModified) {
-                    userId = userFromRemoteDb.getUser_ID();
+//                    userId = userFromRemoteDb.getUser_ID();
                     new SaveUserToLocalDBAsync().execute(userFromRemoteDb);
+                    return 1;
                 } else if (localDateModified > remoteDateModified) {
-                    userId = userFromLocalDb.getUser_ID();
+//                    userId = userFromLocalDb.getUser_ID();
                     postUserToAPI(userFromLocalDb);
                 }
-
             } else {
                 Log.i("CredentialsApp", "No user details found in local database");
-                userId = userFromRemoteDb.getUser_ID();
+//                userId = userFromRemoteDb.getUser_ID();
                 new SaveUserToLocalDBAsync().execute(userFromRemoteDb);
             }
-            return 1; // maybe return the synced credential list and the get the highest index
+            return 0; // maybe return the synced credential list and the get the highest index
         }
     }
 
@@ -720,6 +718,24 @@ public class MainActivity extends AppCompatActivity implements MyAdapter.ItemCli
         protected void onPostExecute(List<User> result) {
             if (result.size() == 1) {
                 user = result.get(0);
+                getAllCredentialsFromAPI();
+            } else {
+                Log.e("CredentialsApp", "Users found in DB should be 1 but is: " + result.size());
+            }
+        }
+        @Override
+        protected List<User> doInBackground(Void... params) {
+            return database.userDAO().getAllUsers();
+        }
+    }
+
+    class SyncUserAsync extends AsyncTask<Void, Void, List<User>> {
+
+        @Override
+        protected void onPostExecute(List<User> result) {
+            if (result.size() == 1) {
+                user = result.get(0);
+                synchronizeUserProfile();
             } else {
                 Log.e("CredentialsApp", "Users found in DB should be 1 but is: " + result.size());
             }
