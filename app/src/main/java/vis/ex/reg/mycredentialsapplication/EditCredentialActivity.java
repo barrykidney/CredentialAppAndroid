@@ -24,7 +24,6 @@ import android.widget.EditText;
 import android.widget.ImageView;
 import android.widget.TextView;
 import android.widget.ToggleButton;
-
 import com.android.volley.NetworkResponse;
 import com.android.volley.Request;
 import com.android.volley.RequestQueue;
@@ -39,7 +38,6 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-
 import vis.ex.reg.mycredentialsapplication.encryption.DataEncryptionSystem;
 
 
@@ -67,9 +65,8 @@ public class EditCredentialActivity extends AppCompatActivity {
     private RequestQueue queue;
     private long authenticatedTime;
     private ToggleButton toggleButton;
-
     private String masterPassword = "";
-
+    private String keyGenPassword = "";
     Dialog dialog;
     ImageView closeBtn;
     Button authBtn;
@@ -101,6 +98,8 @@ public class EditCredentialActivity extends AppCompatActivity {
         // Get the transferred data from source activity.
         Intent intent = getIntent();
         authenticatedTime = Long.valueOf(intent.getStringExtra("authenticatedTime"));
+        masterPassword = intent.getStringExtra("masterPassword");
+        keyGenPassword = intent.getStringExtra("keyGenPassword");
         if (intent.getStringExtra("action").equals("addCredential")) {
             highestCredentialIndex = Integer.valueOf(intent.getStringExtra("highestCredentialIndex"));
         } else if (intent.getStringExtra("action").equals("editCredential")) {
@@ -192,14 +191,16 @@ public class EditCredentialActivity extends AppCompatActivity {
                     String loginHashedPassword = Sha1Encryption.SHA1(loginPasswordTextView.getText().toString());
                     if (loginUsername.equals(user.getUsername()) && loginHashedPassword.equals(user.getMasterPassword())) {
                         authenticatedTime = System.currentTimeMillis();
-                        masterPassword = Sha1Encryption.SHA1(loginPasswordTextView.getText().toString());
-                        List<String> keysList = generateKeys(masterPassword);
+                        masterPassword = loginHashedPassword;
+                        keyGenPassword = Sha1Encryption.SHA1(Utils.toHex(loginPasswordTextView.getText().toString()));
+                        List<String> keysList = generateKeys(keyGenPassword);
                         passwordEditText.setText(decryptPassword(credential.getEncryptedPassword(), keysList));
                         toggleButton.setBackgroundResource(R.drawable.visibility_off);
                         dialog.dismiss();
                     } else {
                         authenticatedTime = 0L;
                         masterPassword = "";
+                        keyGenPassword = "";
                         dialog.dismiss();
                     }
                 } catch (NoSuchAlgorithmException | UnsupportedEncodingException error) {
@@ -234,13 +235,15 @@ public class EditCredentialActivity extends AppCompatActivity {
                     String loginHashedPassword = Sha1Encryption.SHA1(loginPasswordTextView.getText().toString());
                     if (loginUsername.equals(user.getUsername()) && loginHashedPassword.equals(user.getMasterPassword())) {
                         authenticatedTime = System.currentTimeMillis();
-                        masterPassword = Sha1Encryption.SHA1(loginPasswordTextView.getText().toString());
-                        List<String> keysList = generateKeys(masterPassword);
+                        masterPassword = loginHashedPassword;
+                        keyGenPassword = Sha1Encryption.SHA1(Utils.toHex(loginPasswordTextView.getText().toString()));
+                        List<String> keysList = generateKeys(keyGenPassword);
                         saveCredential(keysList);
                         dialog.dismiss();
                     } else {
                         authenticatedTime = 0L;
                         masterPassword = "";
+                        keyGenPassword = "";
                         dialog.dismiss();
                     }
                 } catch (NoSuchAlgorithmException | UnsupportedEncodingException error) {
@@ -277,12 +280,14 @@ public class EditCredentialActivity extends AppCompatActivity {
                     if (loginUsername.equals(user.getUsername()) && loginHashedPassword.equals(user.getMasterPassword())) {
                         Log.e("CredentialsApp", "Authenticated");
                         authenticatedTime = System.currentTimeMillis();
-                        masterPassword = Sha1Encryption.SHA1(loginPasswordTextView.getText().toString());
+                        masterPassword = loginHashedPassword;
+                        keyGenPassword = Sha1Encryption.SHA1(Utils.toHex(loginPasswordTextView.getText().toString()));
                         dialog.dismiss();
                         deleteCredential();
                     } else {
                         authenticatedTime = 0L;
                         masterPassword = "";
+                        keyGenPassword = "";
                         dialog.dismiss();
                     }
                 } catch (NoSuchAlgorithmException | UnsupportedEncodingException error) {
@@ -295,8 +300,6 @@ public class EditCredentialActivity extends AppCompatActivity {
 
     private void saveCredential(List<String> keysList) {
         Credential newCredential = new Credential();
-        int userId = 1;
-
         if (credentialID == -1) {
             credentialID = highestCredentialIndex + 1;
 //          credentialID = (highestCredentialIndex - (highestCredentialIndex % 10)) + 10 + Integer.valueOf(getResources().getString(R.string.device_number));
@@ -315,7 +318,7 @@ public class EditCredentialActivity extends AppCompatActivity {
         newCredential.setEmail(emailEditText.getText().toString());
         newCredential.setDateLastModified(String.valueOf(System.currentTimeMillis()));
         newCredential.setNote(noteEditText.getText().toString());
-        newCredential.setUserId(userId);
+        newCredential.setUserId(user.getUser_ID());
         newCredential.setActive(true);
 
         if (connectionAvailable) {
@@ -346,6 +349,7 @@ public class EditCredentialActivity extends AppCompatActivity {
         intent.putExtra("action", "viewCredential");
         intent.putExtra("authenticatedTime", String.valueOf(authenticatedTime));
         intent.putExtra("masterPassword", String.valueOf(masterPassword));
+        intent.putExtra("keyGenPassword", String.valueOf(keyGenPassword));
         intent.putExtra("credential", String.valueOf(credentialID));
         unregisterReceiver(connectivityMonitor);
         unregisterReceiver(broadcastReceiver);
@@ -356,6 +360,7 @@ public class EditCredentialActivity extends AppCompatActivity {
         Intent intent = new Intent(EditCredentialActivity.this, MainActivity.class);
         intent.putExtra("authenticatedTime", String.valueOf(authenticatedTime));
         intent.putExtra("masterPassword", String.valueOf(masterPassword));
+        intent.putExtra("keyGenPassword", String.valueOf(keyGenPassword));
         unregisterReceiver(connectivityMonitor);
         unregisterReceiver(broadcastReceiver);
         startActivity(intent);
@@ -396,6 +401,7 @@ public class EditCredentialActivity extends AppCompatActivity {
         Intent intent = new Intent(EditCredentialActivity.this, MainActivity.class);
         intent.putExtra("authenticatedTime", String.valueOf(authenticatedTime));
         intent.putExtra("masterPassword", String.valueOf(masterPassword));
+        intent.putExtra("keyGenPassword", String.valueOf(keyGenPassword));
         unregisterReceiver(connectivityMonitor);
         unregisterReceiver(broadcastReceiver);
         startActivity(intent);
@@ -404,7 +410,6 @@ public class EditCredentialActivity extends AppCompatActivity {
 
     private void postCredentialToAPI(JSONObject jsonObject) {
         String url = getResources().getString(R.string.api_url) + "/credentials/";
-
         Response.Listener<JSONObject> responseListener = new Response.Listener<JSONObject>() {
             @Override
             public void onResponse(JSONObject response) {

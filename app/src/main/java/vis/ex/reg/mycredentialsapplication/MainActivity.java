@@ -1,5 +1,6 @@
 package vis.ex.reg.mycredentialsapplication;
 
+import android.app.Dialog;
 import android.app.SearchManager;
 import android.content.BroadcastReceiver;
 import android.content.Context;
@@ -25,6 +26,9 @@ import android.view.MenuInflater;
 import android.view.View;
 import android.view.Menu;
 import android.view.MenuItem;
+import android.widget.Button;
+import android.widget.EditText;
+import android.widget.ImageView;
 import android.widget.SearchView;
 import android.widget.TextView;
 
@@ -38,6 +42,10 @@ import com.android.volley.toolbox.StringRequest;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
+
+import java.io.UnsupportedEncodingException;
+import java.math.BigInteger;
+import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -59,9 +67,13 @@ public class MainActivity extends AppCompatActivity implements MyAdapter.ItemCli
     private boolean connectionAvailable;
     private RequestQueue queue;
     private long authenticatedTime;
-
-//    private int userId = 1;
+    private EditText loginUsernameTextView;
+    private EditText loginPasswordTextView;
     private String masterPassword = "";
+    private String keyGenPassword = "";
+    Dialog dialog;
+    ImageView closeBtn;
+    Button authBtn;
 
 
     @Override
@@ -81,6 +93,11 @@ public class MainActivity extends AppCompatActivity implements MyAdapter.ItemCli
         recyclerView = findViewById(R.id.credentials_recycler_view);
         recyclerView.setLayoutManager(new LinearLayoutManager(this));
 
+        try {
+            Log.e("CredentialsApp", Sha1Encryption.SHA1("Pi11ar 0f autumn11"));
+        } catch (Exception e) {
+            Log.e("CredentialsApp", e.getMessage());
+        }
         connectivitySnackBar = initializeConnectivitySnackBar();
         initializeConnectivityMonitor();
         connectionAvailable = internetConnectionIsAvailable();
@@ -112,6 +129,7 @@ public class MainActivity extends AppCompatActivity implements MyAdapter.ItemCli
                 }
                 intent.putExtra("authenticatedTime", String.valueOf(authenticatedTime));
                 intent.putExtra("masterPassword", String.valueOf(masterPassword));
+                intent.putExtra("keyGenPassword", String.valueOf(keyGenPassword));
                 intent.putExtra("highestCredentialIndex", String.valueOf(highestCredentialIndex));
                 unregisterReceiver(connectivityMonitor);
                 unregisterReceiver(broadcastReceiver);
@@ -721,7 +739,8 @@ public class MainActivity extends AppCompatActivity implements MyAdapter.ItemCli
                 getAllCredentialsFromAPI();
             } else {
                 Log.e("CredentialsApp", "Users found in DB should be 1 but is: " + result.size());
-            }
+                loginToGetAccount();
+                }
         }
         @Override
         protected List<User> doInBackground(Void... params) {
@@ -753,5 +772,87 @@ public class MainActivity extends AppCompatActivity implements MyAdapter.ItemCli
             database.userDAO().addUser(params[0]);
             return 1;
         }
+    }
+
+    private void loginToGetAccount() {
+        final Dialog dialog = new Dialog(this);
+        dialog.setContentView(R.layout.login);
+
+        closeBtn = dialog.findViewById(R.id.btnclose);
+        closeBtn.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                dialog.dismiss();
+            }
+        });
+
+        authBtn = dialog.findViewById(R.id.authenticatebutton);
+        authBtn.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                loginUsernameTextView = dialog.findViewById(R.id.loginTextUsername);
+                loginPasswordTextView = dialog.findViewById(R.id.loginTextPassword);
+
+                try {
+                    String loginUsername = loginUsernameTextView.getText().toString();
+                    String loginHashedPassword = Sha1Encryption.SHA1(loginPasswordTextView.getText().toString());
+                    getRemoteUserAndAddToLocalDb(loginUsername, loginHashedPassword);
+                    dialog.dismiss();
+                } catch (NoSuchAlgorithmException | UnsupportedEncodingException error) {
+                    Log.e("CredentialsApp", error.toString());
+                }
+            }
+        });
+        dialog.show();
+    }
+
+    private void getRemoteUserAndAddToLocalDb(final String username, final String hashedPassword) {
+        String url = getResources().getString(R.string.api_url) + "/user/username/" + username;
+
+        Response.Listener<String> responseListener = new Response.Listener<String>() {
+
+            @Override
+            public void onResponse(String response) {
+                try {
+                    JSONObject JSONobj = new JSONObject(response);
+                    methodToHoldUntilResponseArrived(new User(JSONobj));
+                } catch (java.lang.Throwable e) {
+                    Log.e("CredentialsApp", "MainActivity:updateLocalCredential, " + e.toString());
+                }
+            }
+
+            private void methodToHoldUntilResponseArrived(User newUser){
+                user = newUser;
+                new SaveUserToLocalDBAsync().execute(newUser);
+                getAllCredentialsFromAPI();
+            }
+        };
+
+        Response.ErrorListener responseErrorListener = new Response.ErrorListener() {
+            @Override
+            public void onErrorResponse(VolleyError error) {
+                Log.e("CredentialsApp", error.toString());
+            }
+        };
+
+        StringRequest stringRequest = new StringRequest(Request.Method.GET, url, responseListener, responseErrorListener) {
+
+            @Override
+            public Map<String, String> getHeaders() {
+                HashMap<String, String> headers = new HashMap<>();
+                String credentials = username + ":" + hashedPassword;
+                String auth = "Basic " + Base64.encodeToString(credentials.getBytes(), Base64.NO_WRAP);
+                headers.put("Authorization", auth);
+                return headers;
+            }
+
+            @Override
+            protected Response<String> parseNetworkResponse(NetworkResponse response) {
+                int statusCode = response.statusCode;
+                Log.d("CredentialsApp", "Request status code: " + statusCode);
+                return super.parseNetworkResponse(response);
+            }
+        };
+        queue.add(stringRequest);
     }
 }

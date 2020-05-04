@@ -24,7 +24,6 @@ import android.widget.EditText;
 import android.widget.ImageView;
 import android.widget.TextView;
 import android.widget.ToggleButton;
-
 import com.android.volley.NetworkResponse;
 import com.android.volley.Request;
 import com.android.volley.RequestQueue;
@@ -65,8 +64,8 @@ public class CredentialActivity extends AppCompatActivity {
     private RequestQueue queue;
     private long authenticatedTime;
     private ToggleButton toggleButton;
-
     private String masterPassword = "";
+    private String keyGenPassword = "";
     Dialog dialog;
     ImageView closeBtn;
     Button authBtn;
@@ -105,6 +104,7 @@ public class CredentialActivity extends AppCompatActivity {
         credentialId = Integer.valueOf(intent.getStringExtra("credential"));
         authenticatedTime = Long.valueOf(intent.getStringExtra("authenticatedTime"));
         masterPassword = intent.getStringExtra("masterPassword");
+        keyGenPassword = intent.getStringExtra("keyGenPassword");
         UpdateViewAsync updateViewAsync = new UpdateViewAsync();
         updateViewAsync.execute(credentialId);
 
@@ -172,14 +172,16 @@ public class CredentialActivity extends AppCompatActivity {
 
                     if (loginUsername.equals(user.getUsername()) && loginHashedPassword.equals(user.getMasterPassword())) {
                         authenticatedTime = System.currentTimeMillis();
-                        masterPassword = Sha1Encryption.SHA1(loginPasswordTextView.getText().toString());
-                        List<String> keysList = generateKeys(masterPassword);
+                        masterPassword = loginHashedPassword;
+                        keyGenPassword = Sha1Encryption.SHA1(Utils.toHex(loginPasswordTextView.getText().toString()));
+                        List<String> keysList = generateKeys(keyGenPassword);
                         passwordTextView.setText(decryptPassword(credential.getEncryptedPassword(), keysList));
                         toggleButton.setBackgroundResource(R.drawable.visibility_off);
                         dialog.dismiss();
                     } else {
                         authenticatedTime = 0L;
                         masterPassword ="";
+                        keyGenPassword = "";
                         dialog.dismiss();
                     }
                 } catch (NoSuchAlgorithmException | UnsupportedEncodingException error) {
@@ -214,12 +216,14 @@ public class CredentialActivity extends AppCompatActivity {
                     String loginHashedPassword = Sha1Encryption.SHA1(loginPasswordTextView.getText().toString());
                     if (loginUsername.equals(user.getUsername()) && loginHashedPassword.equals(user.getMasterPassword())) {
                         authenticatedTime = System.currentTimeMillis();
-                        masterPassword = Sha1Encryption.SHA1(loginPasswordTextView.getText().toString());
+                        masterPassword = loginHashedPassword;
+                        keyGenPassword = Sha1Encryption.SHA1(Utils.toHex(loginPasswordTextView.getText().toString()));
                         dialog.dismiss();
                         deleteCredential();
                     } else {
                         authenticatedTime = 0L;
                         masterPassword = "";
+                        keyGenPassword = "";
                         dialog.dismiss();
                     }
                 } catch (NoSuchAlgorithmException | UnsupportedEncodingException error) {
@@ -266,6 +270,7 @@ public class CredentialActivity extends AppCompatActivity {
         Intent intent = new Intent(CredentialActivity.this, MainActivity.class);
         intent.putExtra("authenticatedTime", String.valueOf(authenticatedTime));
         intent.putExtra("masterPassword", String.valueOf(masterPassword));
+        intent.putExtra("keyGenPassword", String.valueOf(keyGenPassword));
         unregisterReceiver(connectivityMonitor);
         unregisterReceiver(broadcastReceiver);
         startActivity(intent);
@@ -277,6 +282,7 @@ public class CredentialActivity extends AppCompatActivity {
         intent.putExtra("action", "editCredential");
         intent.putExtra("authenticatedTime", String.valueOf(authenticatedTime));
         intent.putExtra("masterPassword", String.valueOf(masterPassword));
+        intent.putExtra("keyGenPassword", String.valueOf(keyGenPassword));
         intent.putExtra("credential", credential);
         unregisterReceiver(connectivityMonitor);
         unregisterReceiver(broadcastReceiver);
@@ -305,6 +311,7 @@ public class CredentialActivity extends AppCompatActivity {
         Intent intent = new Intent(CredentialActivity.this, MainActivity.class);
         intent.putExtra("authenticatedTime", String.valueOf(authenticatedTime));
         intent.putExtra("masterPassword", String.valueOf(masterPassword));
+        intent.putExtra("keyGenPassword", String.valueOf(keyGenPassword));
         unregisterReceiver(connectivityMonitor);
         unregisterReceiver(broadcastReceiver);
         startActivity(intent);

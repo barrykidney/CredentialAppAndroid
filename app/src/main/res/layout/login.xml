@@ -39,6 +39,7 @@
         android:layout_width="300dp"
         android:layout_height="wrap_content"
         android:id="@+id/loginTextPassword"
+        android:inputType="textPassword"
         android:layout_below="@+id/loginTextUsername"
         android:layout_centerHorizontal="true"
         android:layout_marginTop="40dp"
