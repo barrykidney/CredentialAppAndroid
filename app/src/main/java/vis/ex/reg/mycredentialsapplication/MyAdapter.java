@@ -42,6 +42,10 @@ public class MyAdapter extends RecyclerView.Adapter<MyAdapter.ViewHolder> {
         return mData.size();
     }
 
+    void setNewData(List<CredentialSummaryDTO> data) {
+        this.mData = data;
+        notifyDataSetChanged();
+    }
 
     // stores and recycles views as they are scrolled off screen
     public class ViewHolder extends RecyclerView.ViewHolder implements View.OnClickListener {

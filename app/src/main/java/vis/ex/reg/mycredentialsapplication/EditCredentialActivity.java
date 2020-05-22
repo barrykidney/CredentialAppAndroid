@@ -100,6 +100,10 @@ public class EditCredentialActivity extends AppCompatActivity {
         authenticatedTime = Long.valueOf(intent.getStringExtra("authenticatedTime"));
         masterPassword = intent.getStringExtra("masterPassword");
         keyGenPassword = intent.getStringExtra("keyGenPassword");
+
+        Log.e("CredentialsApp", "OnCreate - keysGenPassword: " + keyGenPassword);
+        Log.e("CredentialsApp", "OnCreate - authenticatedTime: " + authenticatedTime);
+
         if (intent.getStringExtra("action").equals("addCredential")) {
             highestCredentialIndex = Integer.valueOf(intent.getStringExtra("highestCredentialIndex"));
         } else if (intent.getStringExtra("action").equals("editCredential")) {
@@ -119,8 +123,10 @@ public class EditCredentialActivity extends AppCompatActivity {
             @Override
             public void onCheckedChanged(CompoundButton buttonView, boolean isChecked) {
                 if (isChecked) {
+
+                    Log.e("CredentialsApp", "OnCreate - authenticatedTime: " + authenticatedTime);
                     if (System.currentTimeMillis() - authenticatedTime < 30000) {
-                        List<String> keysList = generateKeys(masterPassword);
+                        List<String> keysList = generateKeys(keyGenPassword);
                         passwordEditText.setText(decryptPassword(credential.getEncryptedPassword(), keysList));
                         toggleButton.setBackgroundResource(R.drawable.visibility_off);
                     } else {
@@ -138,7 +144,10 @@ public class EditCredentialActivity extends AppCompatActivity {
             @Override
             public void onClick(View view) {
                 if (System.currentTimeMillis() - authenticatedTime < 30000) {
-                    List<String> keysList = generateKeys(masterPassword);
+                    List<String> keysList = generateKeys(keyGenPassword);
+                    Log.e("CredentialsApp", "save - masterPassword: " + masterPassword);
+                    Log.e("CredentialsApp", "save - ketGenPassword: " + keyGenPassword);
+                    Log.e("CredentialsApp", "save - keysList: " + keysList);
                     saveCredential(keysList);
                 } else {
                     loginToSaveCredential();
@@ -238,6 +247,7 @@ public class EditCredentialActivity extends AppCompatActivity {
                         masterPassword = loginHashedPassword;
                         keyGenPassword = Sha1Encryption.SHA1(Utils.toHex(loginPasswordTextView.getText().toString()));
                         List<String> keysList = generateKeys(keyGenPassword);
+                        Log.e("CredentialsApp", "keysList: " + keysList);
                         saveCredential(keysList);
                         dialog.dismiss();
                     } else {
@@ -300,9 +310,11 @@ public class EditCredentialActivity extends AppCompatActivity {
 
     private void saveCredential(List<String> keysList) {
         Credential newCredential = new Credential();
+
         if (credentialID == -1) {
             credentialID = highestCredentialIndex + 1;
 //          credentialID = (highestCredentialIndex - (highestCredentialIndex % 10)) + 10 + Integer.valueOf(getResources().getString(R.string.device_number));
+            Log.e("CredentialsApp", "password (encrypt): " + passwordEditText.getText().toString());
             newCredential.setEncryptedPassword(encryptPassword(passwordEditText.getText().toString(), keysList));
         } else {
             if (passwordEditText.getText().toString().equals(getResources().getString(R.string.hidden_password_text))) {
@@ -348,8 +360,9 @@ public class EditCredentialActivity extends AppCompatActivity {
         Intent intent = new Intent(EditCredentialActivity.this, CredentialActivity.class);
         intent.putExtra("action", "viewCredential");
         intent.putExtra("authenticatedTime", String.valueOf(authenticatedTime));
-        intent.putExtra("masterPassword", String.valueOf(masterPassword));
-        intent.putExtra("keyGenPassword", String.valueOf(keyGenPassword));
+        intent.putExtra("masterPassword", masterPassword);
+        Log.e("CredentialsApp", "putExtra: " + keyGenPassword);
+        intent.putExtra("keyGenPassword", keyGenPassword);
         intent.putExtra("credential", String.valueOf(credentialID));
         unregisterReceiver(connectivityMonitor);
         unregisterReceiver(broadcastReceiver);
@@ -359,8 +372,9 @@ public class EditCredentialActivity extends AppCompatActivity {
     private void navigateToMainActivity() {
         Intent intent = new Intent(EditCredentialActivity.this, MainActivity.class);
         intent.putExtra("authenticatedTime", String.valueOf(authenticatedTime));
-        intent.putExtra("masterPassword", String.valueOf(masterPassword));
-        intent.putExtra("keyGenPassword", String.valueOf(keyGenPassword));
+        intent.putExtra("masterPassword", masterPassword);
+        Log.e("CredentialsApp", "putExtra: " + keyGenPassword);
+        intent.putExtra("keyGenPassword", keyGenPassword);
         unregisterReceiver(connectivityMonitor);
         unregisterReceiver(broadcastReceiver);
         startActivity(intent);
@@ -373,6 +387,7 @@ public class EditCredentialActivity extends AppCompatActivity {
         } catch (IOException e) {
             Log.e("DataEncryptionSystem", e.getMessage());
         }
+        Log.e("CredentialsApp", "save - encrypted password: " + encryptedText);
         return encryptedText;
     }
 

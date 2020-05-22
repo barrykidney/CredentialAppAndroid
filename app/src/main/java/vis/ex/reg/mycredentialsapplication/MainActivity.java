@@ -36,7 +36,6 @@ import com.android.volley.NetworkResponse;
 import com.android.volley.Request;
 import com.android.volley.RequestQueue;
 import com.android.volley.Response;
-import com.android.volley.VolleyError;
 import com.android.volley.toolbox.JsonObjectRequest;
 import com.android.volley.toolbox.StringRequest;
 import org.json.JSONArray;
@@ -44,7 +43,6 @@ import org.json.JSONException;
 import org.json.JSONObject;
 
 import java.io.UnsupportedEncodingException;
-import java.math.BigInteger;
 import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -71,9 +69,9 @@ public class MainActivity extends AppCompatActivity implements MyAdapter.ItemCli
     private EditText loginPasswordTextView;
     private String masterPassword = "";
     private String keyGenPassword = "";
-    Dialog dialog;
     ImageView closeBtn;
     Button authBtn;
+    MyAdapter adapter;
 
 
     @Override
@@ -93,28 +91,16 @@ public class MainActivity extends AppCompatActivity implements MyAdapter.ItemCli
         recyclerView = findViewById(R.id.credentials_recycler_view);
         recyclerView.setLayoutManager(new LinearLayoutManager(this));
 
-        try {
-            Log.e("CredentialsApp", Sha1Encryption.SHA1("Pi11ar 0f autumn11"));
-        } catch (Exception e) {
-            Log.e("CredentialsApp", e.getMessage());
-        }
         connectivitySnackBar = initializeConnectivitySnackBar();
         initializeConnectivityMonitor();
         connectionAvailable = internetConnectionIsAvailable();
-
-        new SetUserAsync().execute();
-
-        if (connectionAvailable) {
-            new SyncUserAsync().execute();
-        } else {
-            new UpdateViewAsync().execute();
-        }
 
         authenticatedTime = 0L;
         Intent intent = getIntent();
         if (intent.hasExtra("authenticatedTime") && intent.hasExtra("masterPassword")) {
             authenticatedTime = Long.valueOf(intent.getStringExtra("authenticatedTime"));
             masterPassword = intent.getStringExtra("masterPassword");
+            keyGenPassword = intent.getStringExtra("keyGenPassword");
         }
 
         FloatingActionButton addCredentialButton = findViewById(R.id.addCredential);
@@ -126,16 +112,26 @@ public class MainActivity extends AppCompatActivity implements MyAdapter.ItemCli
                 if (authenticatedTime == 0 || (System.currentTimeMillis() - authenticatedTime) > 30000) {
                     authenticatedTime = 0L;
                     masterPassword = "";
+                    keyGenPassword = "";
                 }
                 intent.putExtra("authenticatedTime", String.valueOf(authenticatedTime));
-                intent.putExtra("masterPassword", String.valueOf(masterPassword));
-                intent.putExtra("keyGenPassword", String.valueOf(keyGenPassword));
+                intent.putExtra("masterPassword", masterPassword);
+                intent.putExtra("keyGenPassword", keyGenPassword);
                 intent.putExtra("highestCredentialIndex", String.valueOf(highestCredentialIndex));
                 unregisterReceiver(connectivityMonitor);
                 unregisterReceiver(broadcastReceiver);
                 startActivity(intent);
             }
         });
+
+        populateRecyclerView(credentialsToBeDisplayed);
+        new GetUserFromLocal().execute();
+    }
+
+    private void populateRecyclerView(List<CredentialSummaryDTO> list) {
+        adapter = new MyAdapter(this, list);
+        adapter.setClickListener(this);
+        recyclerView.setAdapter(adapter);
     }
 
     @Override
@@ -146,7 +142,7 @@ public class MainActivity extends AppCompatActivity implements MyAdapter.ItemCli
             credentialsToBeDisplayed.clear();
             credentialsToBeDisplayed = searchCredentials(query);
             reducedList = true;
-            populateRecyclerView(credentialsToBeDisplayed);
+            adapter.setNewData(credentialsToBeDisplayed);
         }
     }
 
@@ -184,8 +180,7 @@ public class MainActivity extends AppCompatActivity implements MyAdapter.ItemCli
 
     private void navigateToProfileUserActivity() {
         Intent intent = new Intent(MainActivity.this, ProfileActivity.class);
-        // TODO: fix this
-//        intent.putExtra("user", String.valueOf(user.getUser_ID()));
+        // intent.putExtra("user", String.valueOf(user.getUser_ID()));
         if (authenticatedTime == 0 || (System.currentTimeMillis() - authenticatedTime) > 30000) {
             authenticatedTime = 0L;
             masterPassword = "";
@@ -197,56 +192,30 @@ public class MainActivity extends AppCompatActivity implements MyAdapter.ItemCli
         startActivity(intent);
     }
 
-    private void synchronizeUserProfile() {
-        Log.e("CredentialsApp", "synchronizeWithRemote");
-        String url = getResources().getString(R.string.api_url) + "/user/" + user.getUser_ID();
+    class GetUserFromLocal extends AsyncTask<Void, Void, List<User>> {
 
-        Response.Listener<String> responseListener = new Response.Listener<String>() {
-
-            @Override
-            public void onResponse(String response) {
-                try {
-                    JSONObject JSONobj = new JSONObject(response);
-                    methodToHoldUntilResponseArrived(new User(JSONobj));
-                } catch (java.lang.Throwable e) {
-                    Log.e("CredentialsApp", "MainActivity:updateLocalCredential, " + e.toString());
+        @Override
+        protected void onPostExecute(List<User> result) {
+            if (result.size() >= 1) {
+                user = result.get(0);
+                if (connectionAvailable) {
+                    getUserFromRemote(user.getUsername(), user.getMasterPassword());
+                }
+                new GetAllCredentialsFromLocal().execute();
+            } else {
+                if (connectionAvailable) {
+                    login();
                 }
             }
+        }
 
-            private void methodToHoldUntilResponseArrived(User userFromRemote){
-                new UpdateUserDBAsync().execute(userFromRemote);
-            }
-        };
-
-        Response.ErrorListener responseErrorListener = new Response.ErrorListener() {
-            @Override
-            public void onErrorResponse(VolleyError error) {
-                Log.e("CredentialsApp", "MainActivity, getCredentialById : onErrorResponse()");
-            }
-        };
-
-        StringRequest stringRequest = new StringRequest(Request.Method.GET, url, responseListener, responseErrorListener) {
-
-            @Override
-            public Map<String, String> getHeaders() {
-                HashMap<String, String> headers = new HashMap<>();
-                String credentials = user.getUsername() + ":" + user.getMasterPassword();
-                String auth = "Basic " + Base64.encodeToString(credentials.getBytes(), Base64.NO_WRAP);
-                headers.put("Authorization", auth);
-                return headers;
-            }
-
-            @Override
-            protected Response<String> parseNetworkResponse(NetworkResponse response) {
-                int statusCode = response.statusCode;
-                Log.d("CredentialsApp", "Request status code: " + statusCode);
-                return super.parseNetworkResponse(response);
-            }
-        };
-        queue.add(stringRequest);
+        @Override
+        protected List<User> doInBackground(Void... params) {
+            return database.userDAO().getAllUsers();
+        }
     }
 
-    private void getAllCredentialsFromAPI() {
+    private void getAllCredentialsFromRemote() {
         String url = getResources().getString(R.string.api_url) + "/credentials/user/" + user.getUser_ID();
 
         Response.Listener<String> responseListener = new Response.Listener<String>() {
@@ -256,47 +225,25 @@ public class MainActivity extends AppCompatActivity implements MyAdapter.ItemCli
                     JSONArray credentialArray = new JSONArray(response);
                     methodToHoldUntilResponseArrived(credentialArray);
                 } catch (java.lang.Throwable e) {
-                    Log.e("CredentialsApp", "MainActivity:getAllCredentialsFromAPI, " + e.getMessage());
+                    Log.e("CredentialsApp", "MainActivity:getAllCredentialsFromRemote, " + e.getMessage());
                 }
             }
 
-            private void methodToHoldUntilResponseArrived(JSONArray response){
-                List<CredentialSummaryDTO> allReomteCredentials = new ArrayList<>();
+            private void methodToHoldUntilResponseArrived(JSONArray response) {
+                List<CredentialSummaryDTO> allRemoteCredentials = new ArrayList<>();
                 try {
                     for (int i = 0; i < response.length(); i++) {
                         JSONObject jsonObj = (JSONObject) response.get(i);
-                        allReomteCredentials.add(new CredentialSummaryDTO(jsonObj));
+                        allRemoteCredentials.add(new CredentialSummaryDTO(jsonObj));
                     }
-                } catch(JSONException e) {
-                    Log.e("CredentialsApp", "MainActivity:getAllCredentialsFromAPI, " + e.toString());
+                } catch (JSONException e) {
+                    Log.e("CredentialsApp", "MainActivity:getAllCredentialsFromRemote, " + e.toString());
                 }
-                new UpdateDBAsync().execute(allReomteCredentials.toArray(new CredentialSummaryDTO[0]));
+                new SynchronizeCredentials().execute(allRemoteCredentials.toArray(new CredentialSummaryDTO[0]));
             }
         };
-        Response.ErrorListener responseErrorListener = new Response.ErrorListener() {
-            @Override
-            public void onErrorResponse(VolleyError error) {
-                Log.e("CredentialsApp", "MainActivity:getAllCredentialsFromAPI, " + error.getMessage());
-            }
-        };
-        StringRequest stringRequest = new StringRequest(Request.Method.GET, url, responseListener, responseErrorListener) {
 
-            @Override
-            public Map<String, String> getHeaders() {
-                HashMap<String, String> headers = new HashMap<>();
-                String credentials = user.getUsername() + ":" + user.getMasterPassword();
-                String auth = "Basic " + Base64.encodeToString(credentials.getBytes(), Base64.NO_WRAP);
-                headers.put("Authorization", auth);
-                return headers;
-            }
-
-            @Override
-            protected Response<String> parseNetworkResponse(NetworkResponse response) {
-                int statusCode = response.statusCode;
-                Log.d("CredentialsApp", "Request status code: " + statusCode);
-                return super.parseNetworkResponse(response);
-            }
-        };
+        StringRequest stringRequest = new MyStringRequest(Request.Method.GET, url, responseListener, user);
         queue.add(stringRequest);
     }
 
@@ -310,7 +257,8 @@ public class MainActivity extends AppCompatActivity implements MyAdapter.ItemCli
             masterPassword = "";
         }
         intent.putExtra("authenticatedTime", String.valueOf(authenticatedTime));
-        intent.putExtra("masterPassword", String.valueOf(masterPassword));
+        intent.putExtra("masterPassword", masterPassword);
+        intent.putExtra("keyGenPassword", keyGenPassword);
         unregisterReceiver(connectivityMonitor);
         unregisterReceiver(broadcastReceiver);
         startActivity(intent);
@@ -322,7 +270,7 @@ public class MainActivity extends AppCompatActivity implements MyAdapter.ItemCli
             credentialsToBeDisplayed.clear();
             credentialsToBeDisplayed.addAll(allCredentials);
             reducedList = false;
-            populateRecyclerView(credentialsToBeDisplayed);
+            adapter.setNewData(credentialsToBeDisplayed);
         } else {
             Intent startMain = new Intent(Intent.ACTION_MAIN);
             startMain.addCategory(Intent.CATEGORY_HOME);
@@ -342,12 +290,6 @@ public class MainActivity extends AppCompatActivity implements MyAdapter.ItemCli
             }
         }
         return searchResults;
-    }
-
-    private void populateRecyclerView(List<CredentialSummaryDTO> list) {
-        MyAdapter adapter = new MyAdapter(this, list);
-        adapter.setClickListener(this);
-        recyclerView.setAdapter(adapter);
     }
 
     private Snackbar initializeConnectivitySnackBar() {
@@ -384,7 +326,7 @@ public class MainActivity extends AppCompatActivity implements MyAdapter.ItemCli
                 connectivitySnackBar.dismiss();
                 connectivitySnackBarIsDisplayed = false;
                 connectionAvailable = true;
-                getAllCredentialsFromAPI();
+                getAllCredentialsFromRemote(); ////////////////////////////////////////////////////////////// check this shouldn't be from local
 
             } else if (state.equals("unavailable") && !connectivitySnackBarIsDisplayed) {
                 connectivitySnackBar.show();
@@ -435,7 +377,7 @@ public class MainActivity extends AppCompatActivity implements MyAdapter.ItemCli
     }
 
     private void addCredentialToDisplayList(List<Integer> indxList, SparseArray<CredentialSummaryDTO> arr) {
-        for (int id :indxList) {
+        for (int id : indxList) {
             String newCredServiceName = arr.get(id).getServiceName().toLowerCase();
             if (credentialsToBeDisplayed.size() == 0) {
                 credentialsToBeDisplayed.add(arr.get(id));
@@ -444,7 +386,7 @@ public class MainActivity extends AppCompatActivity implements MyAdapter.ItemCli
                     if (credentialsToBeDisplayed.get(i).getServiceName().toLowerCase().compareTo(newCredServiceName) > 0) {
                         credentialsToBeDisplayed.add(i, arr.get(id));
                         break;
-                    } else if (i == credentialsToBeDisplayed.size() -1) {
+                    } else if (i == credentialsToBeDisplayed.size() - 1) {
                         credentialsToBeDisplayed.add(arr.get(id));
                         break;
                     }
@@ -478,7 +420,7 @@ public class MainActivity extends AppCompatActivity implements MyAdapter.ItemCli
     }
 
     private void setHighestCredential(List<CredentialSummaryDTO> creds) {
-        for(CredentialSummaryDTO cred : creds) {
+        for (CredentialSummaryDTO cred : creds) {
             Integer id = cred.getCredential_ID();
             if (id > highestCredentialIndex) {
                 highestCredentialIndex = id;
@@ -486,37 +428,41 @@ public class MainActivity extends AppCompatActivity implements MyAdapter.ItemCli
         }
     }
 
-    class UpdateViewAsync extends AsyncTask<Void, Void, List<CredentialSummaryDTO>> {
+    class GetAllCredentialsFromLocal extends AsyncTask<Integer, Void, List<CredentialSummaryDTO>> {
 
         @Override
         protected void onPostExecute(List<CredentialSummaryDTO> result) {
+            credentialsToBeDisplayed.clear();
             if (result.size() > 0) {
                 allCredentials = result;
-                credentialsToBeDisplayed.clear();
                 for (CredentialSummaryDTO cred : allCredentials) {
                     if (cred.getActive()) {
                         credentialsToBeDisplayed.add(cred);
                     }
                 }
-//                credentialsToBeDisplayed.addAll(allCredentials);
             } else {
-                Log.e("CredentialsApp", "MainActivity:UpdateViewAsync, No information available.");
+                Log.e("CredentialsApp", "No credentials found in local");
             }
-            populateRecyclerView(credentialsToBeDisplayed);
+
+            adapter.setNewData(credentialsToBeDisplayed);
+
+            if (connectionAvailable) {
+                getAllCredentialsFromRemote();
+            }
         }
 
         @Override
-        protected List<CredentialSummaryDTO> doInBackground(Void... params) {
+        protected List<CredentialSummaryDTO> doInBackground(Integer... params) {
             return database.credentialDAO().getAllCredentialsSummary();
         }
     }
 
-    class UpdateDBAsync extends AsyncTask<CredentialSummaryDTO, Void, Integer> {
+    class SynchronizeCredentials extends AsyncTask<CredentialSummaryDTO, Void, Integer> {
 
         @Override
-        protected void onPostExecute(Integer result){
-            if (result == 1) {
-                new UpdateViewAsync().execute();
+        protected void onPostExecute(Integer result) {
+            if (result == 0) {
+                adapter.setNewData(credentialsToBeDisplayed);
             }
         }
 
@@ -526,42 +472,34 @@ public class MainActivity extends AppCompatActivity implements MyAdapter.ItemCli
             for (CredentialSummaryDTO c : params) {
                 remoteArray.put(c.getCredential_ID(), c);
             }
-            SparseArray<CredentialSummaryDTO> localArray = createSparseArrayFromArrayList(
-                database.credentialDAO().getAllCredentialsSummary());
+            SparseArray<CredentialSummaryDTO> localArray = createSparseArrayFromArrayList(allCredentials);
 
             List<Integer> remoteIds = createIdListFromSparseArray(remoteArray);
             List<Integer> localIds = createIdListFromSparseArray(localArray);
-
             addAbsentCredentialsToLocalDb(getExclusiveToA(remoteIds, localIds));
             addAbsentCredentialsToRemoteDb(getExclusiveToA(localIds, remoteIds));
             addCredentialToDisplayList(getExclusiveToA(remoteIds, localIds), remoteArray);
 
             syncIntersectingCredentials(getIntersectionOfAB(remoteIds, localIds), localArray, remoteArray);
+            // TODO: try to do this without a call to the database
             setHighestCredential(database.credentialDAO().getAllCredentialsSummary());
 
-            return 1; // maybe return the synced credential list and the get the highest index
+            return 0; // maybe return the synced credential list and the get the highest index
         }
     }
-    
+
     private void postCredentialToAPI(Credential credential) {
         String url = getResources().getString(R.string.api_url) + "/credentials/";
+        int method = Request.Method.POST;
 
         Response.Listener<JSONObject> responseListener = new Response.Listener<JSONObject>() {
             @Override
             public void onResponse(JSONObject response) {
-                Log.d("CredentialsApp", "Request sent" + response);
+                Log.d("CredentialsApp", "Post credential to API response: " + response);
             }
         };
 
-        Response.ErrorListener errorListener = new Response.ErrorListener() {
-            @Override
-            public void onErrorResponse(VolleyError error) {
-                Log.e("CredentialsApp", "MainActivity, postCredentialToAPI: " + error.getMessage());
-            }
-        };
-
-        JsonObjectRequest request = new JsonObjectRequest(Request.Method.POST,
-            url, credential.toJSON(), responseListener, errorListener) {
+        JsonObjectRequest request = new MyJsonObjectRequest(method, url, credential.toJSON(), responseListener, user) {
 
             @Override
             public Map<String, String> getHeaders() {
@@ -575,7 +513,7 @@ public class MainActivity extends AppCompatActivity implements MyAdapter.ItemCli
             @Override
             protected Response<JSONObject> parseNetworkResponse(NetworkResponse response) {
                 int statusCode = response.statusCode;
-                Log.d("CredentialsApp", "Request status code: " + statusCode);
+                Log.d("CredentialsApp", "Post credential to API status code: " + statusCode);
                 return super.parseNetworkResponse(response);
             }
         };
@@ -597,36 +535,12 @@ public class MainActivity extends AppCompatActivity implements MyAdapter.ItemCli
                 }
             }
 
-            private void methodToHoldUntilResponseArrived(Credential updatedCredential){
+            private void methodToHoldUntilResponseArrived(Credential updatedCredential) {
                 new SaveCredentialToLocalDBAsync().execute(updatedCredential);
             }
         };
 
-        Response.ErrorListener responseErrorListener = new Response.ErrorListener() {
-            @Override
-            public void onErrorResponse(VolleyError error) {
-                Log.e("CredentialsApp", error.toString());
-            }
-        };
-
-        StringRequest stringRequest = new StringRequest(Request.Method.GET, url, responseListener, responseErrorListener) {
-
-            @Override
-            public Map<String, String> getHeaders() {
-                HashMap<String, String> headers = new HashMap<>();
-                String credentials = user.getUsername() + ":" + user.getMasterPassword();
-                String auth = "Basic " + Base64.encodeToString(credentials.getBytes(), Base64.NO_WRAP);
-                headers.put("Authorization", auth);
-                return headers;
-            }
-
-            @Override
-            protected Response<String> parseNetworkResponse(NetworkResponse response) {
-                int statusCode = response.statusCode;
-                Log.d("CredentialsApp", "Request status code: " + statusCode);
-                return super.parseNetworkResponse(response);
-            }
-        };
+        StringRequest stringRequest = new MyStringRequest(Request.Method.GET, url, responseListener, user);
         queue.add(stringRequest);
     }
 
@@ -652,129 +566,8 @@ public class MainActivity extends AppCompatActivity implements MyAdapter.ItemCli
         }
     }
 
-    class UpdateUserDBAsync extends AsyncTask<User, Void, Integer> {
-
-        @Override
-        protected void onPostExecute(Integer result){
-            if (result == 1) {
-                getAllCredentialsFromAPI();
-            }
-        }
-
-        @Override
-        protected Integer doInBackground(User... params) {
-            User userFromRemoteDb = params[0];
-            User userFromLocalDb;
-
-            List<User> localUserList = database.userDAO().getAllUsers();
-            if (localUserList.size() >= 1) {
-                userFromLocalDb = localUserList.get(0);
-
-                long localDateModified = Long.valueOf(userFromLocalDb.getDateLastModified());
-                long remoteDateModified = Long.valueOf(userFromRemoteDb.getDateLastModified());
-
-                if (localDateModified < remoteDateModified) {
-//                    userId = userFromRemoteDb.getUser_ID();
-                    new SaveUserToLocalDBAsync().execute(userFromRemoteDb);
-                    return 1;
-                } else if (localDateModified > remoteDateModified) {
-//                    userId = userFromLocalDb.getUser_ID();
-                    postUserToAPI(userFromLocalDb);
-                }
-            } else {
-                Log.i("CredentialsApp", "No user details found in local database");
-//                userId = userFromRemoteDb.getUser_ID();
-                new SaveUserToLocalDBAsync().execute(userFromRemoteDb);
-            }
-            return 0; // maybe return the synced credential list and the get the highest index
-        }
-    }
-
-    private void postUserToAPI(User localUser) {
-        String url = getResources().getString(R.string.api_url) + "/user/";
-
-        Response.Listener<JSONObject> responseListener = new Response.Listener<JSONObject>() {
-            @Override
-            public void onResponse(JSONObject response) {
-                Log.d("CredentialsApp", "Request sent" + response);
-            }
-        };
-
-        Response.ErrorListener errorListener = new Response.ErrorListener() {
-            @Override
-            public void onErrorResponse(VolleyError error) {
-                Log.e("CredentialsApp", "MainActivity, postCredentialToAPI: " + error.getMessage());
-            }
-        };
-
-        JsonObjectRequest request = new JsonObjectRequest(Request.Method.POST,
-            url, localUser.toJSON(), responseListener, errorListener) {
-
-            @Override
-            public Map<String, String> getHeaders() {
-                HashMap<String, String> headers = new HashMap<>();
-                // TODO: potential bug here posting updated user using old user credentials
-                String credentials = user.getUsername() + ":" + user.getMasterPassword();
-                String auth = "Basic " + Base64.encodeToString(credentials.getBytes(), Base64.NO_WRAP);
-                headers.put("Authorization", auth);
-                return headers;
-            }
-
-            @Override
-            protected Response<JSONObject> parseNetworkResponse(NetworkResponse response) {
-                int statusCode = response.statusCode;
-                Log.d("CredentialsApp", "Request status code: " + statusCode);
-                return super.parseNetworkResponse(response);
-            }
-        };
-        queue.add(request);
-    }
-
-    class SetUserAsync extends AsyncTask<Void, Void, List<User>> {
-
-        @Override
-        protected void onPostExecute(List<User> result) {
-            if (result.size() == 1) {
-                user = result.get(0);
-                getAllCredentialsFromAPI();
-            } else {
-                Log.e("CredentialsApp", "Users found in DB should be 1 but is: " + result.size());
-                loginToGetAccount();
-                }
-        }
-        @Override
-        protected List<User> doInBackground(Void... params) {
-            return database.userDAO().getAllUsers();
-        }
-    }
-
-    class SyncUserAsync extends AsyncTask<Void, Void, List<User>> {
-
-        @Override
-        protected void onPostExecute(List<User> result) {
-            if (result.size() == 1) {
-                user = result.get(0);
-                synchronizeUserProfile();
-            } else {
-                Log.e("CredentialsApp", "Users found in DB should be 1 but is: " + result.size());
-            }
-        }
-        @Override
-        protected List<User> doInBackground(Void... params) {
-            return database.userDAO().getAllUsers();
-        }
-    }
-
-    class SaveUserToLocalDBAsync extends AsyncTask<User, Void, Integer> {
-
-        @Override
-        protected Integer doInBackground(User... params) {
-            database.userDAO().addUser(params[0]);
-            return 1;
-        }
-    }
-
-    private void loginToGetAccount() {
+    private void login() {
+        // TODO: if no connection available inform user
         final Dialog dialog = new Dialog(this);
         dialog.setContentView(R.layout.login);
 
@@ -796,7 +589,8 @@ public class MainActivity extends AppCompatActivity implements MyAdapter.ItemCli
                 try {
                     String loginUsername = loginUsernameTextView.getText().toString();
                     String loginHashedPassword = Sha1Encryption.SHA1(loginPasswordTextView.getText().toString());
-                    getRemoteUserAndAddToLocalDb(loginUsername, loginHashedPassword);
+                    Log.e("CredentialsApp", "595 loginHashedPassword: " + loginHashedPassword);
+                    getUserFromRemote(loginUsername, loginHashedPassword);
                     dialog.dismiss();
                 } catch (NoSuchAlgorithmException | UnsupportedEncodingException error) {
                     Log.e("CredentialsApp", error.toString());
@@ -806,9 +600,12 @@ public class MainActivity extends AppCompatActivity implements MyAdapter.ItemCli
         dialog.show();
     }
 
-    private void getRemoteUserAndAddToLocalDb(final String username, final String hashedPassword) {
+    private void getUserFromRemote(final String username, final String hashedPassword) {
         String url = getResources().getString(R.string.api_url) + "/user/username/" + username;
 
+        User tempUser = new User();
+        tempUser.setUsername(username);
+        tempUser.setMasterPassword(hashedPassword);
         Response.Listener<String> responseListener = new Response.Listener<String>() {
 
             @Override
@@ -821,38 +618,50 @@ public class MainActivity extends AppCompatActivity implements MyAdapter.ItemCli
                 }
             }
 
-            private void methodToHoldUntilResponseArrived(User newUser){
-                user = newUser;
-                new SaveUserToLocalDBAsync().execute(newUser);
-                getAllCredentialsFromAPI();
+            private void methodToHoldUntilResponseArrived(User userFromRemote) {
+                user = userFromRemote;
+                masterPassword = user.getMasterPassword();
+                new SyncUser().execute(userFromRemote);
+                new GetAllCredentialsFromLocal().execute();
             }
         };
 
-        Response.ErrorListener responseErrorListener = new Response.ErrorListener() {
-            @Override
-            public void onErrorResponse(VolleyError error) {
-                Log.e("CredentialsApp", error.toString());
-            }
-        };
-
-        StringRequest stringRequest = new StringRequest(Request.Method.GET, url, responseListener, responseErrorListener) {
-
-            @Override
-            public Map<String, String> getHeaders() {
-                HashMap<String, String> headers = new HashMap<>();
-                String credentials = username + ":" + hashedPassword;
-                String auth = "Basic " + Base64.encodeToString(credentials.getBytes(), Base64.NO_WRAP);
-                headers.put("Authorization", auth);
-                return headers;
-            }
-
-            @Override
-            protected Response<String> parseNetworkResponse(NetworkResponse response) {
-                int statusCode = response.statusCode;
-                Log.d("CredentialsApp", "Request status code: " + statusCode);
-                return super.parseNetworkResponse(response);
-            }
-        };
+        StringRequest stringRequest = new MyStringRequest(Request.Method.GET, url, responseListener, tempUser);
         queue.add(stringRequest);
+    }
+
+    // TODO: Make static, pass in a list of 2 users local and remote
+    class SyncUser extends AsyncTask<User, Void, Integer> {
+
+        @Override
+        protected Integer doInBackground(User... params) {
+            User userFromRemoteDb = params[0];
+
+            long localDateModified = Long.valueOf(user.getDateLastModified());
+            long remoteDateModified = Long.valueOf(userFromRemoteDb.getDateLastModified());
+
+            // both dates are the same if no change occurred (unnecessary saves here) or no user in local (necessary saves here)
+            if (localDateModified <= remoteDateModified) {
+                database.userDAO().addUser(userFromRemoteDb);
+            } else {
+                postUserToAPI(user);
+            }
+            return 0; // maybe return the synced credential list and the get the highest index
+        }
+    }
+
+    private void postUserToAPI(User localUser) {
+        String url = getResources().getString(R.string.api_url) + "/user/";
+        int method = Request.Method.POST;
+
+        Response.Listener<JSONObject> responseListener = new Response.Listener<JSONObject>() {
+            @Override
+            public void onResponse(JSONObject response) {
+                Log.d("CredentialsApp", "Request sent" + response);
+            }
+        };
+
+        JsonObjectRequest request = new MyJsonObjectRequest(method, url, localUser.toJSON(), responseListener, user);
+        queue.add(request);
     }
 }

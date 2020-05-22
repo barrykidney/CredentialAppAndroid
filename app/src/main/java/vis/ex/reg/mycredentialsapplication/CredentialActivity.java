@@ -114,10 +114,14 @@ public class CredentialActivity extends AppCompatActivity {
 
             @Override
             public void onCheckedChanged(CompoundButton buttonView, boolean isChecked) {
-
                 if (isChecked) {
                     if (System.currentTimeMillis() - authenticatedTime < 30000) {
-                        List<String> keysList = generateKeys(masterPassword);
+                        Log.e("CredentialsApp", "decrypt - authenticatedTime: " + authenticatedTime);
+                        Log.e("CredentialsApp", "decrypt - masterPassword: " + masterPassword);
+                        Log.e("CredentialsApp", "decrypt - keyGenPassword: " + keyGenPassword);
+                        Log.e("CredentialsApp", "decrypt - encrypted password: " + credential.getEncryptedPassword());
+                        List<String> keysList = generateKeys(keyGenPassword);
+                        Log.e("CredentialsApp", "decrypt - keyList: " + keysList);
                         passwordTextView.setText(decryptPassword(credential.getEncryptedPassword(), keysList));
                         toggleButton.setBackgroundResource(R.drawable.visibility_off);
                     } else {
@@ -168,13 +172,17 @@ public class CredentialActivity extends AppCompatActivity {
 
                 try {
                     String loginUsername = loginUsernameTextView.getText().toString();
+                    Log.e("CredentialsApp", "password: " + loginPasswordTextView.getText().toString());
                     String loginHashedPassword = Sha1Encryption.SHA1(loginPasswordTextView.getText().toString());
 
                     if (loginUsername.equals(user.getUsername()) && loginHashedPassword.equals(user.getMasterPassword())) {
                         authenticatedTime = System.currentTimeMillis();
                         masterPassword = loginHashedPassword;
+                        Log.e("CredentialsApp", "sha1 password: " + masterPassword);
                         keyGenPassword = Sha1Encryption.SHA1(Utils.toHex(loginPasswordTextView.getText().toString()));
                         List<String> keysList = generateKeys(keyGenPassword);
+                        Log.e("CredentialsApp", "keysList: " + keysList);
+                        // TODO: fix crash here
                         passwordTextView.setText(decryptPassword(credential.getEncryptedPassword(), keysList));
                         toggleButton.setBackgroundResource(R.drawable.visibility_off);
                         dialog.dismiss();
@@ -235,6 +243,7 @@ public class CredentialActivity extends AppCompatActivity {
     }
 
     public List<String> generateKeys(String pwd) {
+        Log.e("CredentialsApp", "222222222222222222222222222222222 " + pwd);
         List<String> kList = new ArrayList<>();
         try {
             kList.add(Sha1Encryption.SHA1(pwd.substring(0,13)).substring(5,21));
@@ -258,10 +267,12 @@ public class CredentialActivity extends AppCompatActivity {
     private String decryptPassword(String clearText, List<String> keys) {
         String decryptedText = "";
         try {
+            // TODO: fix crash here
             decryptedText = dataEncryptionSystem.DecryptTripleDES(clearText, keys.get(0), keys.get(1), keys.get(2));
         } catch (IOException e) {
             Log.e("DataEncryptionSystem", e.getMessage());
         }
+        Log.e("CredentialsApp", "decrypt - decrypted password: " + decryptedText);
         return decryptedText;
     }
 
@@ -269,8 +280,8 @@ public class CredentialActivity extends AppCompatActivity {
     public void onBackPressed() {
         Intent intent = new Intent(CredentialActivity.this, MainActivity.class);
         intent.putExtra("authenticatedTime", String.valueOf(authenticatedTime));
-        intent.putExtra("masterPassword", String.valueOf(masterPassword));
-        intent.putExtra("keyGenPassword", String.valueOf(keyGenPassword));
+        intent.putExtra("masterPassword", masterPassword);
+        intent.putExtra("keyGenPassword", keyGenPassword);
         unregisterReceiver(connectivityMonitor);
         unregisterReceiver(broadcastReceiver);
         startActivity(intent);
@@ -281,8 +292,8 @@ public class CredentialActivity extends AppCompatActivity {
         Intent intent = new Intent(CredentialActivity.this, EditCredentialActivity.class);
         intent.putExtra("action", "editCredential");
         intent.putExtra("authenticatedTime", String.valueOf(authenticatedTime));
-        intent.putExtra("masterPassword", String.valueOf(masterPassword));
-        intent.putExtra("keyGenPassword", String.valueOf(keyGenPassword));
+        intent.putExtra("masterPassword", masterPassword);
+        intent.putExtra("keyGenPassword", keyGenPassword);
         intent.putExtra("credential", credential);
         unregisterReceiver(connectivityMonitor);
         unregisterReceiver(broadcastReceiver);
@@ -385,7 +396,7 @@ public class CredentialActivity extends AppCompatActivity {
                 credential = result.get(0);
                 populateCredentialView();
             } else {
-                Log.e("CredentialsApp", "MainActivity:UpdateViewAsync, No information available.");
+                Log.e("CredentialsApp", "MainActivity:GetAllCredentialsFromLocal, No information available.");
             }
         }
         @Override
