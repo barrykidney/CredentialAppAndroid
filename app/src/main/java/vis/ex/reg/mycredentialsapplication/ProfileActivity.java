@@ -107,7 +107,7 @@ public class ProfileActivity extends AppCompatActivity {
                 User user = result.get(0);
                 populateProfileView(user);
             } else {
-                Log.e("CredentialsApp", "MainActivity:UpdateViewAsync, No information available.");
+                Log.e("CredentialsApp", "MainActivity:GetAllCredentialsFromLocal, No information available.");
             }
         }
         @Override
