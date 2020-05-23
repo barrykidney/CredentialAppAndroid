@@ -7,21 +7,16 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.net.ConnectivityManager;
-import android.net.NetworkInfo;
 import android.os.AsyncTask;
-import android.os.Build;
 import android.os.Bundle;
 import android.support.design.widget.FloatingActionButton;
 import android.support.design.widget.Snackbar;
-import android.support.v4.content.ContextCompat;
 import android.support.v7.app.AppCompatActivity;
 import android.support.v7.widget.LinearLayoutManager;
 import android.support.v7.widget.RecyclerView;
 import android.support.v7.widget.Toolbar;
-import android.util.Base64;
 import android.util.Log;
 import android.util.SparseArray;
-import android.view.Gravity;
 import android.view.MenuInflater;
 import android.view.View;
 import android.view.Menu;
@@ -30,9 +25,7 @@ import android.widget.Button;
 import android.widget.EditText;
 import android.widget.ImageView;
 import android.widget.SearchView;
-import android.widget.TextView;
 
-import com.android.volley.NetworkResponse;
 import com.android.volley.Request;
 import com.android.volley.RequestQueue;
 import com.android.volley.Response;
@@ -45,9 +38,7 @@ import org.json.JSONObject;
 import java.io.UnsupportedEncodingException;
 import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 
 
 public class MainActivity extends AppCompatActivity implements MyAdapter.ItemClickListener {
@@ -91,9 +82,9 @@ public class MainActivity extends AppCompatActivity implements MyAdapter.ItemCli
         recyclerView = findViewById(R.id.credentials_recycler_view);
         recyclerView.setLayoutManager(new LinearLayoutManager(this));
 
-        connectivitySnackBar = initializeConnectivitySnackBar();
+        connectivitySnackBar = Utils.initializeConnectivitySnackBar(this, findViewById(R.id.credentials_page));
         initializeConnectivityMonitor();
-        connectionAvailable = internetConnectionIsAvailable();
+        connectionAvailable = Utils.internetConnectionIsAvailable(this);
 
         authenticatedTime = 0L;
         Intent intent = getIntent();
@@ -109,7 +100,7 @@ public class MainActivity extends AppCompatActivity implements MyAdapter.ItemCli
             public void onClick(View view) {
                 Intent intent = new Intent(MainActivity.this, EditCredentialActivity.class);
                 intent.putExtra("action", "addCredential");
-                if (authenticatedTime == 0 || (System.currentTimeMillis() - authenticatedTime) > 30000) {
+                if ((System.currentTimeMillis() - authenticatedTime) > 30000) {
                     authenticatedTime = 0L;
                     masterPassword = "";
                     keyGenPassword = "";
@@ -140,7 +131,7 @@ public class MainActivity extends AppCompatActivity implements MyAdapter.ItemCli
         if (Intent.ACTION_SEARCH.equals(intent.getAction())) {
             String query = intent.getStringExtra(SearchManager.QUERY);
             credentialsToBeDisplayed.clear();
-            credentialsToBeDisplayed = searchCredentials(query);
+            credentialsToBeDisplayed = Utils.searchCredentials(query, allCredentials);
             reducedList = true;
             adapter.setNewData(credentialsToBeDisplayed);
         }
@@ -180,7 +171,6 @@ public class MainActivity extends AppCompatActivity implements MyAdapter.ItemCli
 
     private void navigateToProfileUserActivity() {
         Intent intent = new Intent(MainActivity.this, ProfileActivity.class);
-        // intent.putExtra("user", String.valueOf(user.getUser_ID()));
         if (authenticatedTime == 0 || (System.currentTimeMillis() - authenticatedTime) > 30000) {
             authenticatedTime = 0L;
             masterPassword = "";
@@ -279,38 +269,6 @@ public class MainActivity extends AppCompatActivity implements MyAdapter.ItemCli
         }
     }
 
-    private List<CredentialSummaryDTO> searchCredentials(String searchString) {
-        List<CredentialSummaryDTO> searchResults = new ArrayList<>();
-
-        for (CredentialSummaryDTO credentialSummary : allCredentials) {
-            String serviceName = credentialSummary.getServiceName().toLowerCase();
-            String note = credentialSummary.getNote().toLowerCase();
-            if (serviceName.contains(searchString.toLowerCase()) | note.contains(searchString.toLowerCase())) {
-                searchResults.add(credentialSummary);
-            }
-        }
-        return searchResults;
-    }
-
-    private Snackbar initializeConnectivitySnackBar() {
-        Snackbar snackBar = Snackbar.make(findViewById(R.id.credentials_page), "Connection unavailable", Snackbar.LENGTH_INDEFINITE);
-        View snackBarView = snackBar.getView();
-        snackBarView.setBackgroundColor(ContextCompat.getColor(this, R.color.snackbarBackgroundColor));
-        TextView snackBarTextView = snackBarView.findViewById(android.support.design.R.id.snackbar_text);
-        if (Build.VERSION.SDK_INT >= 21) {
-            snackBarTextView.setTextAlignment(View.TEXT_ALIGNMENT_CENTER);
-        } else {
-            snackBarTextView.setGravity(Gravity.CENTER_HORIZONTAL);
-        }
-        return snackBar;
-    }
-
-    private boolean internetConnectionIsAvailable() {
-        ConnectivityManager connectivityManager = (ConnectivityManager) getSystemService(Context.CONNECTIVITY_SERVICE);
-        return connectivityManager.getNetworkInfo(ConnectivityManager.TYPE_MOBILE).getState() == NetworkInfo.State.CONNECTED
-            || connectivityManager.getNetworkInfo(ConnectivityManager.TYPE_WIFI).getState() == NetworkInfo.State.CONNECTED;
-    }
-
     private void initializeConnectivityMonitor() {
         connectivityMonitor = new CheckConnectivity();
         this.registerReceiver(this.connectivityMonitor, new IntentFilter(ConnectivityManager.CONNECTIVITY_ACTION));
@@ -326,7 +284,8 @@ public class MainActivity extends AppCompatActivity implements MyAdapter.ItemCli
                 connectivitySnackBar.dismiss();
                 connectivitySnackBarIsDisplayed = false;
                 connectionAvailable = true;
-                getAllCredentialsFromRemote(); ////////////////////////////////////////////////////////////// check this shouldn't be from local
+                // TODO: check this shouldn't be from local
+                getAllCredentialsFromRemote();
 
             } else if (state.equals("unavailable") && !connectivitySnackBarIsDisplayed) {
                 connectivitySnackBar.show();
@@ -335,34 +294,6 @@ public class MainActivity extends AppCompatActivity implements MyAdapter.ItemCli
             }
         }
     };
-
-    private ArrayList<Integer> createIdListFromSparseArray(SparseArray<CredentialSummaryDTO> list) {
-        ArrayList<Integer> idList = new ArrayList<>();
-        for (int i = 0; i < list.size(); i++) {
-            idList.add(list.keyAt(i));
-        }
-        return idList;
-    }
-
-    private SparseArray<CredentialSummaryDTO> createSparseArrayFromArrayList(List<CredentialSummaryDTO> list) {
-        SparseArray<CredentialSummaryDTO> sa = new SparseArray<>();
-        for (CredentialSummaryDTO c : list) {
-            sa.put(c.getCredential_ID(), c);
-        }
-        return sa;
-    }
-
-    private List<Integer> getIntersectionOfAB(List<Integer> a, List<Integer> b) {
-        ArrayList<Integer> c = new ArrayList<>(a);
-        c.retainAll(b);
-        return c;
-    }
-
-    private List<Integer> getExclusiveToA(List<Integer> a, List<Integer> b) {
-        List<Integer> c = new ArrayList<>(a);
-        c.removeAll(b);
-        return c;
-    }
 
     private void addAbsentCredentialsToLocalDb(List<Integer> indxList) {
         for (Integer id : indxList) {
@@ -419,15 +350,6 @@ public class MainActivity extends AppCompatActivity implements MyAdapter.ItemCli
         }
     }
 
-    private void setHighestCredential(List<CredentialSummaryDTO> creds) {
-        for (CredentialSummaryDTO cred : creds) {
-            Integer id = cred.getCredential_ID();
-            if (id > highestCredentialIndex) {
-                highestCredentialIndex = id;
-            }
-        }
-    }
-
     class GetAllCredentialsFromLocal extends AsyncTask<Integer, Void, List<CredentialSummaryDTO>> {
 
         @Override
@@ -435,17 +357,11 @@ public class MainActivity extends AppCompatActivity implements MyAdapter.ItemCli
             credentialsToBeDisplayed.clear();
             if (result.size() > 0) {
                 allCredentials = result;
-                for (CredentialSummaryDTO cred : allCredentials) {
-                    if (cred.getActive()) {
-                        credentialsToBeDisplayed.add(cred);
-                    }
-                }
+                credentialsToBeDisplayed = Utils.getAllActiveCredentials(result);
             } else {
                 Log.e("CredentialsApp", "No credentials found in local");
             }
-
             adapter.setNewData(credentialsToBeDisplayed);
-
             if (connectionAvailable) {
                 getAllCredentialsFromRemote();
             }
@@ -461,9 +377,8 @@ public class MainActivity extends AppCompatActivity implements MyAdapter.ItemCli
 
         @Override
         protected void onPostExecute(Integer result) {
-            if (result == 0) {
-                adapter.setNewData(credentialsToBeDisplayed);
-            }
+            highestCredentialIndex = result;
+            adapter.setNewData(credentialsToBeDisplayed);
         }
 
         @Override
@@ -472,19 +387,16 @@ public class MainActivity extends AppCompatActivity implements MyAdapter.ItemCli
             for (CredentialSummaryDTO c : params) {
                 remoteArray.put(c.getCredential_ID(), c);
             }
-            SparseArray<CredentialSummaryDTO> localArray = createSparseArrayFromArrayList(allCredentials);
-
-            List<Integer> remoteIds = createIdListFromSparseArray(remoteArray);
-            List<Integer> localIds = createIdListFromSparseArray(localArray);
-            addAbsentCredentialsToLocalDb(getExclusiveToA(remoteIds, localIds));
-            addAbsentCredentialsToRemoteDb(getExclusiveToA(localIds, remoteIds));
-            addCredentialToDisplayList(getExclusiveToA(remoteIds, localIds), remoteArray);
-
-            syncIntersectingCredentials(getIntersectionOfAB(remoteIds, localIds), localArray, remoteArray);
+            SparseArray<CredentialSummaryDTO> localArray = Utils.createSparseArrayFromArrayList(allCredentials);
+            List<Integer> remoteIds = Utils.createIdListFromSparseArray(remoteArray);
+            List<Integer> localIds = Utils.createIdListFromSparseArray(localArray);
+            addAbsentCredentialsToLocalDb(Utils.getExclusiveToA(remoteIds, localIds));
+            addAbsentCredentialsToRemoteDb(Utils.getExclusiveToA(localIds, remoteIds));
+            addCredentialToDisplayList(Utils.getExclusiveToA(remoteIds, localIds), remoteArray);
+            syncIntersectingCredentials(Utils.getIntersectionOfAB(remoteIds, localIds), localArray, remoteArray);
             // TODO: try to do this without a call to the database
-            setHighestCredential(database.credentialDAO().getAllCredentialsSummary());
-
-            return 0; // maybe return the synced credential list and the get the highest index
+            allCredentials = database.credentialDAO().getAllCredentialsSummary();
+            return Utils.setHighestCredential(allCredentials);
         }
     }
 
@@ -499,24 +411,7 @@ public class MainActivity extends AppCompatActivity implements MyAdapter.ItemCli
             }
         };
 
-        JsonObjectRequest request = new MyJsonObjectRequest(method, url, credential.toJSON(), responseListener, user) {
-
-            @Override
-            public Map<String, String> getHeaders() {
-                HashMap<String, String> headers = new HashMap<>();
-                String credentials = user.getUsername() + ":" + user.getMasterPassword();
-                String auth = "Basic " + Base64.encodeToString(credentials.getBytes(), Base64.NO_WRAP);
-                headers.put("Authorization", auth);
-                return headers;
-            }
-
-            @Override
-            protected Response<JSONObject> parseNetworkResponse(NetworkResponse response) {
-                int statusCode = response.statusCode;
-                Log.d("CredentialsApp", "Post credential to API status code: " + statusCode);
-                return super.parseNetworkResponse(response);
-            }
-        };
+        JsonObjectRequest request = new MyJsonObjectRequest(method, url, credential.toJSON(), responseListener, user);
         queue.add(request);
     }
 
@@ -567,7 +462,6 @@ public class MainActivity extends AppCompatActivity implements MyAdapter.ItemCli
     }
 
     private void login() {
-        // TODO: if no connection available inform user
         final Dialog dialog = new Dialog(this);
         dialog.setContentView(R.layout.login);
 
@@ -589,7 +483,6 @@ public class MainActivity extends AppCompatActivity implements MyAdapter.ItemCli
                 try {
                     String loginUsername = loginUsernameTextView.getText().toString();
                     String loginHashedPassword = Sha1Encryption.SHA1(loginPasswordTextView.getText().toString());
-                    Log.e("CredentialsApp", "595 loginHashedPassword: " + loginHashedPassword);
                     getUserFromRemote(loginUsername, loginHashedPassword);
                     dialog.dismiss();
                 } catch (NoSuchAlgorithmException | UnsupportedEncodingException error) {
@@ -601,11 +494,11 @@ public class MainActivity extends AppCompatActivity implements MyAdapter.ItemCli
     }
 
     private void getUserFromRemote(final String username, final String hashedPassword) {
-        String url = getResources().getString(R.string.api_url) + "/user/username/" + username;
+        String url = getResources().getString(R.string.api_url) + "/user/me";
 
-        User tempUser = new User();
-        tempUser.setUsername(username);
-        tempUser.setMasterPassword(hashedPassword);
+        User userToBeAuthenticated = new User();
+        userToBeAuthenticated.setUsername(username);
+        userToBeAuthenticated.setMasterPassword(hashedPassword);
         Response.Listener<String> responseListener = new Response.Listener<String>() {
 
             @Override
@@ -620,33 +513,32 @@ public class MainActivity extends AppCompatActivity implements MyAdapter.ItemCli
 
             private void methodToHoldUntilResponseArrived(User userFromRemote) {
                 user = userFromRemote;
-                masterPassword = user.getMasterPassword();
-                new SyncUser().execute(userFromRemote);
+                masterPassword = userFromRemote.getMasterPassword();
+                new SyncUser().execute(userFromRemote, user);
                 new GetAllCredentialsFromLocal().execute();
             }
         };
 
-        StringRequest stringRequest = new MyStringRequest(Request.Method.GET, url, responseListener, tempUser);
+        StringRequest stringRequest = new MyStringRequest(Request.Method.GET, url, responseListener, userToBeAuthenticated);
         queue.add(stringRequest);
     }
 
-    // TODO: Make static, pass in a list of 2 users local and remote
     class SyncUser extends AsyncTask<User, Void, Integer> {
 
         @Override
         protected Integer doInBackground(User... params) {
             User userFromRemoteDb = params[0];
+            User userFromLocalDb = params[1];
 
-            long localDateModified = Long.valueOf(user.getDateLastModified());
+            long localDateModified = Long.valueOf(userFromLocalDb.getDateLastModified());
             long remoteDateModified = Long.valueOf(userFromRemoteDb.getDateLastModified());
 
-            // both dates are the same if no change occurred (unnecessary saves here) or no user in local (necessary saves here)
             if (localDateModified <= remoteDateModified) {
                 database.userDAO().addUser(userFromRemoteDb);
             } else {
-                postUserToAPI(user);
+                postUserToAPI(userFromLocalDb);
             }
-            return 0; // maybe return the synced credential list and the get the highest index
+            return 0;
         }
     }
 
